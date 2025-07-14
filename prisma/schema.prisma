@@ -1,0 +1,245 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "postgresql"
+    // NOTE: When using mysql or sqlserver, uncomment the @db.Text annotations in model Account below
+    // Further reading:
+    // https://next-auth.js.org/adapters/prisma#create-the-prisma-schema
+    // https://www.prisma.io/docs/reference/api-reference/prisma-schema-reference#string
+    url      = env("DATABASE_URL")
+}
+
+// Enums
+enum UserRole {
+    ADMIN
+    TECHNICIAN
+    CLIENT
+}
+
+enum WorkOrderStatus {
+    PENDING
+    ASSIGNED
+    IN_PROGRESS
+    COMPLETED
+    CANCELLED
+}
+
+enum WorkOrderPriority {
+    LOW
+    MEDIUM
+    HIGH
+    URGENT
+}
+
+enum InvoiceStatus {
+    DRAFT
+    PENDING
+    PAID
+    OVERDUE
+    CANCELLED
+}
+
+enum CustomerType {
+    RESIDENTIAL
+    COMMERCIAL
+    INDUSTRIAL
+}
+
+// Core Models
+model User {
+    id            String    @id @default(cuid())
+    name          String?
+    email         String?   @unique
+    emailVerified DateTime?
+    image         String?
+    password      String?
+    role          UserRole  @default(ADMIN)
+    phone         String?
+    isActive      Boolean   @default(true)
+    createdAt     DateTime  @default(now())
+    updatedAt     DateTime  @updatedAt
+
+    // Relations
+    accounts            Account[]
+    sessions            Session[]
+    posts               Post[]
+    createdWorkOrders   WorkOrder[]    @relation("CreatedByUser")
+    assignedWorkOrders  WorkOrder[]    @relation("AssignedToUser")
+    customers           Customer[]     @relation("CustomerCreatedBy")
+    invoices            Invoice[]      @relation("InvoiceCreatedBy")
+    teamMemberships     TeamMember[]
+    
+    @@index([email])
+    @@index([role])
+}
+
+model Customer {
+    id          String       @id @default(cuid())
+    name        String
+    email       String?
+    phone       String?
+    address     String?
+    city        String?
+    state       String?
+    zipCode     String?
+    type        CustomerType @default(RESIDENTIAL)
+    notes       String?
+    isActive    Boolean      @default(true)
+    createdAt   DateTime     @default(now())
+    updatedAt   DateTime     @updatedAt
+    
+    // Relations
+    createdBy     User         @relation("CustomerCreatedBy", fields: [createdById], references: [id])
+    createdById   String
+    workOrders    WorkOrder[]
+    invoices      Invoice[]
+    
+    @@index([name])
+    @@index([email])
+    @@index([type])
+}
+
+model WorkOrder {
+    id              String            @id @default(cuid())
+    title           String
+    description     String?
+    status          WorkOrderStatus   @default(PENDING)
+    priority        WorkOrderPriority @default(MEDIUM)
+    estimatedHours  Float?
+    actualHours     Float?
+    amount          Float?
+    scheduledDate   DateTime?
+    completedDate   DateTime?
+    location        String?
+    notes           String?
+    createdAt       DateTime          @default(now())
+    updatedAt       DateTime          @updatedAt
+    
+    // Relations
+    customer      Customer    @relation(fields: [customerId], references: [id])
+    customerId    String
+    createdBy     User        @relation("CreatedByUser", fields: [createdById], references: [id])
+    createdById   String
+    assignedTo    User?       @relation("AssignedToUser", fields: [assignedToId], references: [id])
+    assignedToId  String?
+    team          Team?       @relation(fields: [teamId], references: [id])
+    teamId        String?
+    invoices      Invoice[]
+    
+    @@index([status])
+    @@index([priority])
+    @@index([customerId])
+    @@index([assignedToId])
+    @@index([scheduledDate])
+}
+
+model Team {
+    id          String   @id @default(cuid())
+    name        String
+    description String?
+    isActive    Boolean  @default(true)
+    createdAt   DateTime @default(now())
+    updatedAt   DateTime @updatedAt
+    
+    // Relations
+    members     TeamMember[]
+    workOrders  WorkOrder[]
+    
+    @@index([name])
+}
+
+model TeamMember {
+    id       String @id @default(cuid())
+    role     String @default("MEMBER") // LEADER, MEMBER
+    joinedAt DateTime @default(now())
+    
+    // Relations
+    user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+    userId String
+    team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+    teamId String
+    
+    @@unique([userId, teamId])
+}
+
+model Invoice {
+    id          String        @id @default(cuid())
+    number      String        @unique
+    status      InvoiceStatus @default(DRAFT)
+    amount      Float
+    tax         Float         @default(0)
+    discount    Float         @default(0)
+    total       Float
+    dueDate     DateTime
+    paidDate    DateTime?
+    notes       String?
+    createdAt   DateTime      @default(now())
+    updatedAt   DateTime      @updatedAt
+    
+    // Relations
+    customer      Customer    @relation(fields: [customerId], references: [id])
+    customerId    String
+    workOrder     WorkOrder?  @relation(fields: [workOrderId], references: [id])
+    workOrderId   String?
+    createdBy     User        @relation("InvoiceCreatedBy", fields: [createdById], references: [id])
+    createdById   String
+    
+    @@index([status])
+    @@index([customerId])
+    @@index([number])
+    @@index([dueDate])
+}
+
+// Legacy models (keep for compatibility)
+model Post {
+    id        Int      @id @default(autoincrement())
+    name      String
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    createdBy   User   @relation(fields: [createdById], references: [id])
+    createdById String
+
+    @@index([name])
+}
+
+// NextAuth models
+model Account {
+    id                       String  @id @default(cuid())
+    userId                   String
+    type                     String
+    provider                 String
+    providerAccountId        String
+    refresh_token            String? // @db.Text
+    access_token             String? // @db.Text
+    expires_at               Int?
+    token_type               String?
+    scope                    String?
+    id_token                 String? // @db.Text
+    session_state            String?
+    user                     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+    refresh_token_expires_in Int?
+
+    @@unique([provider, providerAccountId])
+}
+
+model Session {
+    id           String   @id @default(cuid())
+    sessionToken String   @unique
+    userId       String
+    expires      DateTime
+    user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+    identifier String
+    token      String   @unique
+    expires    DateTime
+
+    @@unique([identifier, token])
+}
