@@ -11,8 +11,9 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { ZodError } from "zod";
 
-import { auth } from "~/server/auth";
-import { db } from "~/server/db";
+import { db } from "@/server/db";
+import { getServerUser } from '@/lib/supabase/server'; // Changed from getServerSession
+import { UserRole } from '@/lib/types';
 
 /**
  * 1. CONTEXT
@@ -27,11 +28,35 @@ import { db } from "~/server/db";
  * @see https://trpc.io/docs/server/context
  */
 export const createTRPCContext = async (opts: { headers: Headers }) => {
-  const session = await auth();
+  const { data: { user } } = await getServerUser(); // Changed from getServerSession
+
+  let session = null;
+  let companyId: string | null = null;
+  let userRole: UserRole = UserRole.CLIENT;
+
+  if (user) {
+    userRole = (user.user_metadata?.role as UserRole) || UserRole.CLIENT;
+    companyId = (user.user_metadata?.company_id as string) || null;
+    // Construct a compatible session object if needed for existing components
+    session = {
+      user: {
+        ...user,
+        role: userRole,
+        companyId: companyId,
+        company: companyId ? { id: companyId } : undefined, // Basic company info
+        name: user.user_metadata?.full_name || user.email || 'User',
+        image: user.user_metadata?.avatar_url || undefined,
+      },
+      expires: '', // Placeholder or derive from user.exp
+    };
+  }
 
   return {
     db,
     session,
+    user,
+    companyId,
+    userRole,
     ...opts,
   };
 };
@@ -72,7 +97,7 @@ export const createCallerFactory = t.createCallerFactory;
  */
 
 /**
- * This is how you create new routers and sub-routers in your tRPC API.
+ * This is how you create new routers and sub-routers in your tRPC API. 
  *
  * @see https://trpc.io/docs/router
  */

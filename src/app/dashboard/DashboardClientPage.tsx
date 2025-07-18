@@ -1,12 +1,29 @@
 'use client';
 
+import { useState } from 'react';
+import { 
+  type WorkOrderType,
+  type WorkOrderResponse, 
+  type WorkOrderStats,
+  type PaginatedResponse,
+  UserRole,
+  getUserExperience,
+  UserExperience,
+  WorkOrderStatus,
+  type CustomerBase,
+} from '@/lib/types';
+import { api } from '@/trpc/react';
+import { usePageTitle } from '@/lib/hooks/use-page-title';
 import { motion } from 'framer-motion';
-import { type Session } from 'next-auth';
-import { LayoutDashboard, TrendingUp, Clock, CheckCircle, Users, DollarSign, FileText, Calendar, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { api, type RouterOutputs } from '~/trpc/react';
-import { type WorkOrderWithRelations, type CustomerWithRelations, type InvoiceWithRelations } from '~/lib/types';
+import { cn } from '@/lib/utils';
+import { Target, DollarSign, CheckCircle, TrendingUp, Calendar, FileText, Users, Loader2, RefreshCw } from 'lucide-react';
+import { type inferProcedureOutput } from '@trpc/server';
+import { type AppRouter } from '@/server/api/root';
+import { Badge } from '@/components/ui/badge';
+import { CustomSession } from '@/lib/providers/session-provider';
+import { format } from 'date-fns';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -31,187 +48,250 @@ const cardVariants = {
   },
 };
 
-export default function DashboardClientPage({ session }: { session: Session }) {
-  // Fetch real data from database
-  const { data: workOrderStats, isLoading: workOrderStatsLoading, error: workOrderStatsError } = api.workOrder.getStats.useQuery();
-  const { data: customerStats, isLoading: customerStatsLoading, error: customerStatsError } = api.customer.getStats.useQuery();
-  const { data: recentWorkOrders, isLoading: recentWorkOrdersLoading } = api.workOrder.getAll.useQuery({
-    limit: 5,
-  });
-
-  // Calculate dashboard statistics
-  const statsData: {
-    title: string;
-    value: string;
-    change: string;
-    icon: React.ElementType;
-    color: string;
-    bgColor: string;
-    borderColor: string;
-    isLoading: boolean;
-  }[] = [
-    {
-      title: 'Active Jobs',
-      value: ((workOrderStats?.pending ?? 0) + (workOrderStats?.inProgress ?? 0)).toString(),
-      change: (workOrderStats?.inProgress ?? 0) > 0 ? `${workOrderStats?.inProgress ?? 0} in progress` : 'Loading...', 
-      icon: FileText,
-      color: 'text-blue-500',
-      bgColor: 'bg-blue-500/10',
-      borderColor: 'border-blue-500/20',
-      isLoading: workOrderStatsLoading,
-    },
-    {
-      title: 'Completed Today',
-      value: (workOrderStats?.completed ?? 0).toString(),
-      change: (workOrderStats?.completed ?? 0) > 0 ? 'Recently completed' : 'No completed jobs',
-      icon: CheckCircle,
-      color: 'text-green-500',
-      bgColor: 'bg-green-500/10',
-      borderColor: 'border-green-500/20',
-      isLoading: workOrderStatsLoading,
-    },
-    {
-      title: 'Total Customers',
-      value: (customerStats?.total ?? 0).toString(),
-      change: `${customerStats?.commercial ?? 0} commercial`,
-      icon: Users,
-      color: 'text-purple-500',
-      bgColor: 'bg-purple-500/10',
-      borderColor: 'border-purple-500/20',
-      isLoading: customerStatsLoading,
-    },
-    {
-      title: 'Revenue Total',
-      value: `$${(workOrderStats?.totalValue ?? 0).toLocaleString()}`,
-      change: (workOrderStats?.totalValue ?? 0) > 0 ? 'Total project value' : 'No revenue recorded',
-      icon: DollarSign,
-      color: 'text-emerald-500',
-      bgColor: 'bg-emerald-500/10',
-      borderColor: 'border-emerald-500/20',
-      isLoading: workOrderStatsLoading,
-    },
+/**
+ * Returns time-appropriate greeting based on local time
+ * Handles edge cases and midnight/noon properly
+ */
+const getTimeOfDay = () => {
+  const hour = new Date().getHours();
+  
+  // Define time slots with precise boundaries
+  const timeSlots = [
+    { start: 5, end: 11, period: 'Morning' },    // 5:00 AM - 11:59 AM
+    { start: 12, end: 16, period: 'Afternoon' }, // 12:00 PM - 4:59 PM
+    { start: 17, end: 20, period: 'Evening' },   // 5:00 PM - 8:59 PM
+    { start: 21, end: 23, period: 'Night' },     // 9:00 PM - 11:59 PM
+    { start: 0, end: 4, period: 'Night' }        // 12:00 AM - 4:59 AM
   ];
 
-  // Get recent activities from work orders
-  const recentActivities: (
-    RouterOutputs["workOrder"]["getAll"]["workOrders"][number] & { time: string; customer: string; } 
-  )[] = (recentWorkOrders?.workOrders ?? []).slice(0, 3).map((workOrder: RouterOutputs["workOrder"]["getAll"]["workOrders"][number]) => ({
-    id: workOrder.id,
-    title: workOrder.title,
-    time: getRelativeTime(workOrder.updatedAt),
-    status: workOrder.status,
-    customer: workOrder.customer?.name ?? 'Unknown Customer',
-    priority: workOrder.priority,
-  }));
+  return timeSlots.find(slot => hour >= slot.start && hour <= slot.end)?.period || 'Day';
+};
 
-  // Helper function to get relative time
-  function getRelativeTime(date: string | Date) {
-    const now = new Date();
-    const past = new Date(date);
-    const diffMs = now.getTime() - past.getTime();
-    const diffMins = Math.floor(diffMs / (1000 * 60));
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+function getTodaysIncome(recentWorkOrders?: PaginatedResponse<WorkOrderResponse>) {
+  const today = new Date();
+  const todaysCompleted = recentWorkOrders?.items?.filter((job) => {
+    const jobDate = new Date(job.scheduledDate ?? job.createdAt);
+    return jobDate.toDateString() === today.toDateString();
+  }) ?? [];
 
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins} minutes ago`;
-    if (diffHours < 24) return `${diffHours} hours ago`;
-    return `${diffDays} days ago`;
+  return todaysCompleted.reduce((sum, order) => sum + (order.amount ?? 0), 0).toFixed(2);
+}
+
+function getStatusColor(status: WorkOrderStatus) {
+  switch (status) {
+  case 'COMPLETED':
+    return 'bg-green-100 text-green-800';
+  case 'IN_PROGRESS':
+    return 'bg-blue-100 text-blue-800';
+  case 'PENDING':
+    return 'bg-yellow-100 text-yellow-800';
+  case 'CANCELLED':
+    return 'bg-red-100 text-red-800';
+  default:
+    return 'bg-gray-100 text-gray-800';
   }
+}
 
-  // Loading state
-  if (workOrderStatsLoading || customerStatsLoading || recentWorkOrdersLoading) {
-    return (
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="space-y-6"
-      >
-        {/* Welcome Header */}
-        <motion.div variants={cardVariants} className="glass rounded-xl p-6 bg-gradient-to-r from-primary/10 via-blue-500/5 to-purple-500/10 border border-primary/20">
-          <div className="flex items-center justify-between">
-            <div className="space-y-2">
-              <div className="h-8 w-64 bg-muted animate-pulse rounded" />
-              <div className="h-4 w-48 bg-muted animate-pulse rounded" />
-            </div>
-            <div className="w-16 h-16 bg-muted animate-pulse rounded-xl" />
+// Solo Operator Dashboard - Simple task list + income tracker
+function SoloOperatorDashboard(props: {
+  session: CustomSession;
+  workOrderStats?: WorkOrderStats;
+  customerStats?: any;
+  recentWorkOrders?: PaginatedResponse<WorkOrderResponse>;
+  isLoading: boolean;
+  onRefetch: () => void;
+}) {
+  const { session, workOrderStats, recentWorkOrders, isLoading, onRefetch } = props;
+
+  // Filter today's jobs
+  const todaysJobs = recentWorkOrders?.items?.filter((job) => {
+    const today = new Date();
+    const jobDate = new Date(job.scheduledDate ?? job.createdAt);
+    return jobDate.toDateString() === today.toDateString();
+  }) ?? [];
+
+  // Calculate today's income
+  const todaysIncome = todaysJobs
+    .filter((job) => job.status === 'COMPLETED')
+    .reduce((sum: number, job) => sum + (job.amount ?? 0), 0);
+
+  return (
+    <motion.div
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+      className="space-y-6 max-w-4xl mx-auto"
+    >
+      {/* Welcome Header - Personal */}
+      <motion.div variants={cardVariants} className="glass rounded-2xl p-6 bg-gradient-to-r from-primary/10 via-blue-500/5 to-purple-500/10 border border-primary/20">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gradient mb-2">
+              Good {getTimeOfDay()}, {session?.user?.name?.split(' ')[0] || 'there'}!
+            </h1>
+            <p className="text-muted-foreground text-lg">
+              {todaysJobs.length === 0 
+                ? "No tasks scheduled for today. Time to grow your business!" 
+                : `You have ${todaysJobs.length} ${todaysJobs.length === 1 ? 'task' : 'tasks'} today`}
+            </p>
           </div>
+          <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+            <Target className="w-8 h-8 text-primary" />
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Quick Stats Cards */}
+      <motion.div 
+        variants={containerVariants} 
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+      >
+        {/* Total Work Orders */}
+        <motion.div variants={cardVariants}>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Work Orders</CardTitle>
+              <FileText className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{workOrderStats?.total ?? 0}</div>
+              <p className="text-xs text-muted-foreground">
+                {workOrderStats?.totalValue !== undefined && workOrderStats.totalValue !== null ? `€${workOrderStats.totalValue.toLocaleString('fi-FI')}` : '€0'} total value
+              </p>
+            </CardContent>
+          </Card>
         </motion.div>
 
-        {/* Stats Grid Loading */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {statsData.map((stat, index: number) => (
-            <Card key={index} className="glass">
-              <CardContent className="p-6">
-                <div className="h-20 bg-muted animate-pulse rounded" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        {/* Completed Work Orders */}
+        <motion.div variants={cardVariants}>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Completed</CardTitle>
+              <CheckCircle className="h-4 w-4 text-green-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-500">{workOrderStats?.completed ?? 0}</div>
+            </CardContent>
+          </Card>
+        </motion.div>
 
-        {/* Content Loading */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <Card className="glass">
-              <CardHeader>
-                <CardTitle>Recent Activity</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {[...Array(3)].map((_, i) => (
-                    <div key={i} className="h-16 bg-muted animate-pulse rounded" />
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-          <div>
-            <Card className="glass">
-              <CardHeader>
-                <CardTitle>Quick Actions</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {[...Array(4)].map((_, i) => (
-                    <div key={i} className="h-10 bg-muted animate-pulse rounded" />
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </motion.div>
-    );
-  }
+        {/* Total Income */}
+        <motion.div variants={cardVariants}>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Income</CardTitle>
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">€{workOrderStats?.totalValue?.toFixed(2) ?? '0.00'}</div>
+            </CardContent>
+          </Card>
+        </motion.div>
 
-  // Error state
-  if (workOrderStatsError || customerStatsError) {
-    return (
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
-        className="space-y-6"
-      >
-        <Card className="glass border-destructive/20">
-          <CardContent className="p-6 text-center">
-            <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
-            <h3 className="text-lg font-medium mb-2">Error Loading Dashboard</h3>
-            <p className="text-muted-foreground mb-4">
-              {workOrderStatsError?.message ?? customerStatsError?.message ?? 'Failed to load dashboard data. Please try again.'}
-            </p>
-            <Button 
-              onClick={() => window.location.reload()} 
-              className="gradient-primary"
-            >
-              Try Again
-            </Button>
-          </CardContent>
-        </Card>
+        {/* Today's Income */}
+        <motion.div variants={cardVariants}>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Today's Income</CardTitle>
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">€{todaysIncome.toFixed(2)}</div>
+            </CardContent>
+          </Card>
+        </motion.div>
       </motion.div>
-    );
-  }
+
+      {/* Today's Jobs */}
+      {todaysJobs.length > 0 && (
+        <motion.div variants={cardVariants}>
+          <Card>
+            <CardHeader>
+              <CardTitle>Today's Jobs</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {/* Add a list or grid of today's jobs */}
+              <div className="space-y-2">
+                {todaysJobs.map((job) => (
+                  <div key={job.id} className="flex justify-between items-center p-2 bg-muted/50 rounded-lg">
+                    <div>
+                      <div className="font-medium">{job.title}</div>
+                      <div className="text-xs text-muted-foreground">{job.customer?.name}</div>
+                    </div>
+                    <div className={`text-sm font-semibold ${
+                      job.status === 'COMPLETED' ? 'text-green-500' : 
+                        job.status === 'IN_PROGRESS' ? 'text-blue-500' : 
+                          'text-muted-foreground'
+                    }`}>
+                      {job.status}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+    </motion.div>
+  );
+}
+
+// Field Worker Dashboard - Clock in/out + today's jobs
+function FieldWorkerDashboard(props: {
+  session: CustomSession;
+  workOrderStats?: WorkOrderStats;
+  recentWorkOrders?: PaginatedResponse<WorkOrderResponse>;
+  isLoading: boolean;
+  onRefetch: () => void;
+}) {
+  const { session, workOrderStats, recentWorkOrders, isLoading, onRefetch } = props;
+  const [isClockedIn, setIsClockedIn] = useState(false);
+
+  const todaysAssignedJobs = recentWorkOrders?.items?.filter((job) => {
+    const today = new Date();
+    const jobDate = new Date(job.scheduledDate ?? job.createdAt);
+    return jobDate.toDateString() === today.toDateString() && job.assignedTo?.id === session?.user?.id; // Added null check
+  }) ?? [];
+
+  return (
+    <motion.div
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+      className="space-y-6 max-w-4xl mx-auto"
+    >
+      <motion.div variants={cardVariants} className="glass rounded-2xl p-6 bg-gradient-to-r from-blue-500/10 via-blue-500/5 to-blue-500/10 border border-blue-500/20">
+        <h1 className="text-2xl font-bold text-gradient mb-2">
+          Field Worker Dashboard
+        </h1>
+        <p className="text-muted-foreground text-lg">
+          Dashboard content for field workers is coming soon!
+        </p>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// Team Manager Dashboard - Overview of team performance + company metrics
+function TeamManagerDashboard(props: {
+  session: CustomSession;
+  workOrderStats?: WorkOrderStats;
+  customerStats?: any;
+  recentWorkOrders?: PaginatedResponse<WorkOrderResponse>;
+  isLoading: boolean;
+  onRefetch: () => void;
+}) {
+  const { session, workOrderStats, customerStats, recentWorkOrders, isLoading, onRefetch } = props;
+
+  const todaysJobs = recentWorkOrders?.items?.filter((job) => {
+    const today = new Date();
+    const jobDate = new Date(job.scheduledDate ?? job.createdAt);
+    return jobDate.toDateString() === today.toDateString();
+  }) ?? [];
+
+  const handleRefetchManager = () => {
+    onRefetch();
+  };
 
   return (
     <motion.div
@@ -220,184 +300,279 @@ export default function DashboardClientPage({ session }: { session: Session }) {
       animate="visible"
       className="space-y-6"
     >
-      {/* Welcome Header */}
-      <motion.div variants={cardVariants} className="glass rounded-xl p-6 bg-gradient-to-r from-primary/10 via-blue-500/5 to-purple-500/10 border border-primary/20">
+      {/* Welcome Header - Team Manager */}
+      <motion.div variants={cardVariants} className="glass rounded-2xl p-6 bg-gradient-to-r from-purple-500/10 via-purple-500/5 to-purple-500/10 border border-purple-500/20">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gradient mb-2">
-              Welcome back, {session.user.name ?? session.user.email}!
+            <h1 className="text-2xl font-bold text-gradient mb-2">
+              Good {getTimeOfDay()}, {session?.user?.name?.split(' ')[0] || 'Team Manager'}!
             </h1>
-            <p className="text-muted-foreground">
-              Here&apos;s what&apos;s happening with your business today.
+            <p className="text-muted-foreground text-lg">
+              Team performance overview and key metrics
             </p>
           </div>
-          <motion.div
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.95 }}
-            className="hidden md:block"
-          >
-            <div className="w-16 h-16 rounded-xl bg-primary/10 flex items-center justify-center">
-              <LayoutDashboard className="w-8 h-8 text-primary" />
-            </div>
-          </motion.div>
+          <div className="w-16 h-16 rounded-2xl bg-purple-500/10 flex items-center justify-center">
+            <Users className="w-8 h-8 text-purple-500" />
+          </div>
         </div>
       </motion.div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {statsData.map((stat, index: number) => (
-          <motion.div key={stat.title} variants={cardVariants} custom={index}>
-            <Card className={`glass hover:shadow-glow transition-all duration-300 border ${stat.borderColor} group cursor-pointer`}>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">{stat.title}</p>
-                    {stat.isLoading ? (
-                      <div className="h-8 w-16 bg-muted animate-pulse rounded" />
-                    ) : (
-                      <p className="text-2xl font-bold">{stat.value}</p>
-                    )}
-                    <p className={`text-xs ${stat.color} flex items-center mt-1`}>
-                      <TrendingUp className="w-3 h-3 mr-1" />
-                      {stat.isLoading ? (
-                        <div className="h-3 w-12 bg-muted animate-pulse rounded" />
-                      ) : (
-                        stat.change
-                      )}
-                    </p>
-                  </div>
-                  <motion.div
-                    whileHover={{ scale: 1.1, rotate: 5 }}
-                    className={`w-12 h-12 rounded-lg ${stat.bgColor} flex items-center justify-center group-hover:shadow-glow transition-all duration-300`}
-                  >
-                    <stat.icon className={`w-6 h-6 ${stat.color}`} />
-                  </motion.div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        ))}
-      </div>
+      {/* Quick Stats Grid */}
+      <motion.div 
+        variants={containerVariants} 
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+      >
+        {/* Total Work Orders */}
+        <motion.div variants={cardVariants}>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Work Orders</CardTitle>
+              <FileText className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{workOrderStats?.total ?? 0}</div>
+            </CardContent>
+          </Card>
+        </motion.div>
 
-      {/* Recent Activity and Quick Actions */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent Activity */}
-        <motion.div variants={cardVariants} className="lg:col-span-2">
-          <Card className="glass border border-border/50">
+        {/* Completed Work Orders */}
+        <motion.div variants={cardVariants}>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Completed</CardTitle>
+              <CheckCircle className="h-4 w-4 text-green-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-500">{workOrderStats?.completed ?? 0}</div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* Total Customers */}
+        <motion.div variants={cardVariants}>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Customers</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{customerStats?.total ?? 0}</div>
+              <p className="text-xs text-muted-foreground">
+                {customerStats?.growth?.total?.isPositive === true ? '+' : ''}
+                {customerStats?.growth?.total?.value ?? 0}% from last month
+              </p>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* Total Income */}
+        <motion.div variants={cardVariants}>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Income</CardTitle>
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">€{workOrderStats?.totalValue?.toFixed(2) ?? '0.00'}</div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      </motion.div>
+
+      {/* Recent Work Orders and Team Performance */}
+      <motion.div 
+        variants={containerVariants} 
+        className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+      >
+        {/* Recent Work Orders */}
+        <motion.div variants={cardVariants}>
+          <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Clock className="w-5 h-5 text-primary" />
-                Recent Activity
+                <FileText className="w-5 h-5 text-primary" />
+                Recent Work Orders
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {recentActivities.length === 0 ? (
-                  <div className="text-center py-8">
-                    <FileText className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                    <p className="text-muted-foreground">No recent activity</p>
-                  </div>
-                ) : (
-                  recentActivities.map((activity: RouterOutputs["workOrder"]["getAll"]["workOrders"][number] & { time: string; customer: string }, index: number) => (
-                    <motion.div
-                      key={activity.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.1 * index, duration: 0.3 }}
-                      className="flex items-center justify-between p-4 rounded-lg bg-muted/20 hover:bg-muted/30 transition-colors group"
+              {recentWorkOrders?.items?.length ? (
+                <div className="space-y-3">
+                  {recentWorkOrders.items.slice(0, 5).map((order) => (
+                    <div 
+                      key={order.id} 
+                      className="flex items-center justify-between p-3 bg-muted/50 rounded-lg hover:bg-muted transition-colors"
                     >
-                      <div className="flex-1">
-                        <h4 className="font-medium group-hover:text-primary transition-colors">
-                          {activity.title}
-                        </h4>
-                        <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-                          <span>{activity.time}</span>
-                          <span>•</span>
-                          <span>{activity.customer}</span>
-                        </div>
+                      <div>
+                        <p className="font-medium">{order.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(order.scheduledDate ?? order.createdAt).toLocaleDateString()}
+                        </p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            activity.status === 'COMPLETED'
-                              ? 'bg-green-500/10 text-green-500'
-                              : activity.status === 'IN_PROGRESS'
-                              ? 'bg-blue-500/10 text-blue-500'
-                              : activity.status === 'ASSIGNED'
-                              ? 'bg-purple-500/10 text-purple-500'
-                              : 'bg-yellow-500/10 text-yellow-500'
-                          }`}
-                        >
-                          {activity.status.replace('_', ' ')}
-                        </span>
-                      </div>
-                    </motion.div>
-                  ))
-                )}
-              </div>
+                      <Badge 
+                        variant="outline" 
+                        className={`${getStatusColor(order.status)} border-none`}
+                      >
+                        {order.status}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-muted-foreground text-center py-4">
+                  No recent work orders
+                </p>
+              )}
             </CardContent>
           </Card>
         </motion.div>
 
-        {/* Quick Actions */}
+        {/* Team Performance */}
         <motion.div variants={cardVariants}>
-          <Card className="glass border border-border/50">
+          <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-primary" />
-                Quick Actions
+                <TrendingUp className="w-5 h-5 text-primary" />
+                Team Performance
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <Button className="w-full justify-start gap-3 gradient-primary shadow-glow hover:shadow-glow-lg transition-all duration-300 group">
-                <FileText className="w-4 h-4" />
-                Create Work Order
-              </Button>
-              <Button variant="outline" className="w-full justify-start gap-3 glass hover:bg-primary/5 transition-all duration-300">
-                <Users className="w-4 h-4" />
-                Add Customer
-              </Button>
-              <Button variant="outline" className="w-full justify-start gap-3 glass hover:bg-primary/5 transition-all duration-300">
-                <DollarSign className="w-4 h-4" />
-                Generate Invoice
-              </Button>
-              <Button variant="outline" className="w-full justify-start gap-3 glass hover:bg-primary/5 transition-all duration-300">
-                <Calendar className="w-4 h-4" />
-                Schedule Job
-              </Button>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* User Info Card (for reference) */}
-        <motion.div variants={cardVariants}>
-          <Card className="glass border border-border/50">
-            <CardHeader>
-              <CardTitle>Account Information</CardTitle>
-            </CardHeader>
             <CardContent>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">User ID:</span>
-                  <span className="font-mono text-xs">{session.user.id}</span>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p>Average Work Order Completion Time</p>
+                  <p className="font-bold">2.5 days</p>
                 </div>
-                {session.user.email && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Email:</span>
-                    <span className="font-mono text-xs">{session.user.email}</span>
-                  </div>
-                )}
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Role:</span>
-                  <span className="text-primary font-medium">
-                    {((session.user as Session["user"] & { role?: string })?.role ?? 'ADMIN').replace('_', ' ').toLowerCase().replace(/\b\w/g, (l: string) => l.toUpperCase())}
-                  </span>
+                <div className="flex items-center justify-between">
+                  <p>New Customers This Month</p>
+                  <p className="font-bold">{customerStats?.newCustomers ?? 0}</p>
+                </div>
+                <div className="flex items-center justify-between">
+                  <p>Active Work Orders</p>
+                  <p className="font-bold">{workOrderStats?.inProgress ?? 0}</p>
+                </div>
+                <div className="flex items-center justify-between">
+                  <p>Total Team Productivity</p>
+                  <p className="font-bold">85%</p>
                 </div>
               </div>
             </CardContent>
           </Card>
         </motion.div>
-      </div>
+      </motion.div>
+
+      {/* Action Buttons */}
+      <motion.div variants={cardVariants} className="flex justify-end space-x-4">
+        <Button 
+          variant="outline" 
+          onClick={handleRefetchManager}
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="mr-2 h-4 w-4" />
+          )}
+          Refresh Data
+        </Button>
+        <Button 
+          className="gradient-primary shadow-glow"
+          onClick={() => {/* Navigate to detailed reports */}}
+        >
+          View Detailed Reports
+        </Button>
+      </motion.div>
     </motion.div>
   );
+}
+
+// Modify the dashboard rendering logic to ensure consistent hook usage
+export default function DashboardClientPage({ session }: { session: CustomSession }) {
+  const userRole = session?.user?.role ?? UserRole.CLIENT; // Default to CLIENT for safety
+  const userExperience = getUserExperience(userRole);
+
+  // Set dynamic page title
+  usePageTitle(userRole);
+
+  // Fetch real data from database with default values
+  const workOrderStatsQuery = api.workOrder.getStats.useQuery();
+  const customerStatsQuery = api.customer.getStats.useQuery();
+  const recentWorkOrdersQuery = api.workOrder.list.useQuery({ limit: 5 });
+
+  // Default values for stats
+  const workOrderStats = workOrderStatsQuery.data ?? {
+    total: 0,
+    pending: 0,
+    assigned: 0,
+    inProgress: 0,
+    completed: 0,
+    cancelled: 0,
+    totalValue: 0
+  };
+
+  const customerStats = customerStatsQuery.data ?? {
+    totalCustomers: 0,
+    newCustomers: 0,
+    customersWithActiveWorkOrders: 0,
+    averageWorkOrdersPerCustomer: 0
+  };
+
+  const recentWorkOrders = recentWorkOrdersQuery.data;
+
+  // Debug logging
+  console.log('User Role:', userRole);
+  console.log('User Experience:', userExperience);
+  console.log('Work Order Stats Loading:', workOrderStatsQuery.isLoading);
+  console.log('Customer Stats Loading:', customerStatsQuery.isLoading);
+  console.log('Recent Work Orders Loading:', recentWorkOrdersQuery.isLoading);
+
+  const handleRefetch = () => {
+    void recentWorkOrdersQuery.refetch();
+    void workOrderStatsQuery.refetch();
+    void customerStatsQuery.refetch();
+  };
+
+  const isLoading = workOrderStatsQuery.isLoading || 
+                    customerStatsQuery.isLoading || 
+                    recentWorkOrdersQuery.isLoading;
+
+  // Consistent loading state rendering
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[calc(100vh-100px)]">
+        <p className="text-lg text-muted-foreground">Loading dashboard data...</p>
+      </div>
+    );
+  }
+
+  // Consistent error handling
+  const hasError = workOrderStatsQuery.error || 
+                   customerStatsQuery.error || 
+                   recentWorkOrdersQuery.error;
+
+  if (hasError) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-100px)] text-red-500">
+        <p className="text-lg">Error loading dashboard data.</p>
+        <p className="text-sm text-muted-foreground">Please try refreshing the page or contact support.</p>
+      </div>
+    );
+  }
+
+  // Render different dashboards with consistent props
+  const dashboardProps = {
+    session,
+    workOrderStats,
+    customerStats,
+    recentWorkOrders,
+    isLoading,
+    onRefetch: handleRefetch,
+  };
+
+  switch (userExperience) {
+  case UserExperience.FIELD_WORKER:
+    return <FieldWorkerDashboard {...dashboardProps} />;
+  case UserExperience.TEAM_MANAGER:
+    return <TeamManagerDashboard {...dashboardProps} />;
+  case UserExperience.SOLO_OPERATOR:
+  default:
+    return <SoloOperatorDashboard {...dashboardProps} />;
+  }
 }

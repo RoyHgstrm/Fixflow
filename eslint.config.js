@@ -1,36 +1,42 @@
-import { dir } from "console";
-import { dirname } from "path";
-import { fileURLToPath } from "url";
-import { FlatCompat } from "@eslint/eslintrc";
+import nextPlugin from '@next/eslint-plugin-next';
+import reactPlugin from 'eslint-plugin-react';
+import hooksPlugin from 'eslint-plugin-react-hooks';
+import typescriptEslint from '@typescript-eslint/eslint-plugin';
+import typescriptParser from '@typescript-eslint/parser';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-});
-
-const config = [
-  ...compat.extends("next/core-web-vitals", "next/typescript"),
+export default [
   {
-    rules: {
-      // Temporarily relax some strict rules to focus on core functionality
-      "@typescript-eslint/no-unsafe-assignment": "warn",
-      "@typescript-eslint/no-unsafe-call": "warn", 
-      "@typescript-eslint/no-unsafe-member-access": "warn",
-      "@typescript-eslint/no-unsafe-return": "warn",
-      "@typescript-eslint/no-unsafe-argument": "warn",
-      "@typescript-eslint/no-explicit-any": "warn",
-      "@typescript-eslint/prefer-nullish-coalescing": "warn",
-      "@typescript-eslint/no-unused-vars": "warn",
-      "@typescript-eslint/consistent-type-imports": "warn",
-      "@typescript-eslint/no-redundant-type-constituents": "warn",
-      "@typescript-eslint/no-unsafe-enum-comparison": "warn",
-      "@typescript-eslint/no-floating-promises": "warn",
-      "react/no-unescaped-entities": "warn",
-      "prefer-const": "warn",
+    files: ['**/*.{ts,tsx}'],
+    plugins: {
+      '@typescript-eslint': typescriptEslint,
+      'react': reactPlugin,
+      'react-hooks': hooksPlugin,
+      '@next/next': nextPlugin
     },
-  },
+    languageOptions: {
+      parser: typescriptParser,
+      parserOptions: {
+        ecmaFeatures: { jsx: true },
+        project: './tsconfig.json'
+      }
+    },
+    rules: {
+      // Strict type safety
+      '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/strict-boolean-expressions': 'error',
+      
+      // React best practices
+      'react/prop-types': 'off', // TypeScript handles this
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'warn',
+      
+      // Performance and code quality
+      'no-console': ['warn', { allow: ['warn', 'error'] }],
+      'complexity': ['warn', { max: 10 }],
+      
+      // Consistency
+      'indent': ['error', 2],
+      'max-len': ['warn', { code: 120 }]
+    }
+  }
 ];
-
-export default config;

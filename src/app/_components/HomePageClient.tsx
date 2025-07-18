@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { motion } from "framer-motion";
 import { AnimatedHeading } from "./AnimatedHeading";
+import { PLAN_CONFIGS, PlanType, type UserRole } from "@/lib/types";
 import { 
   ArrowRight, 
   CheckCircle, 
@@ -22,7 +23,8 @@ import {
   Star,
   Quote,
   ArrowUpRight,
-  CheckCircle2
+  CheckCircle2,
+  Sparkles
 } from "lucide-react";
 
 const containerVariants = {
@@ -105,67 +107,6 @@ const features = [
   },
 ];
 
-// MVP Pricing plans - removed free tier
-const pricingPlans = [
-  {
-    name: "Professional",
-    description: "Complete solution for small to medium businesses",
-    price: "$29",
-    period: "per user/month",
-    features: [
-      "Unlimited work orders",
-      "Customer management",
-      "Team scheduling",
-      "Invoice generation",
-      "Mobile app access",
-      "Basic reporting",
-      "Email support",
-      "Cloud storage"
-    ],
-    cta: "Start 14-Day Trial",
-    popular: true,
-    color: "border-primary/50 shadow-glow"
-  },
-  {
-    name: "Business",
-    description: "Advanced features for growing enterprises",
-    price: "$59",
-    period: "per user/month",
-    features: [
-      "Everything in Professional",
-      "Advanced analytics & insights",
-      "Custom workflow automation",
-      "Team performance tracking",
-      "API access & integrations",
-      "Priority support",
-      "White-label options",
-      "Advanced security features"
-    ],
-    cta: "Start Trial",
-    popular: false,
-    color: "border-border/50"
-  },
-  {
-    name: "Enterprise",
-    description: "Custom solutions for large operations",
-    price: "Custom",
-    period: "contact sales",
-    features: [
-      "Everything in Business",
-      "Dedicated account manager",
-      "Custom integrations",
-      "Advanced security & compliance",
-      "24/7 phone support",
-      "On-premise deployment options",
-      "Custom training & onboarding",
-      "SLA guarantees"
-    ],
-    cta: "Contact Sales",
-    popular: false,
-    color: "border-border/50"
-  }
-];
-
 // Real testimonials structure for MVP
 const testimonials = [
   {
@@ -198,7 +139,7 @@ const testimonials = [
 const faqs = [
   {
     question: "How quickly can we get started?",
-    answer: "Setup takes less than 30 minutes. Import your existing customer data, invite your team, and start creating work orders immediately. No technical expertise required."
+    answer: "Setup takes less than 30 minutes. Choose your plan, create your company, and start creating work orders immediately. No technical expertise required."
   },
   {
     question: "Does it work offline?",
@@ -242,8 +183,8 @@ export default function HomePageClient() {
             <div className="lg:w-1/2 text-center lg:text-left">
               <motion.div variants={itemVariants} className="mb-6">
                 <span className="inline-flex items-center px-4 py-2 rounded-full text-sm font-medium bg-primary/10 text-primary border border-primary/20">
-                  <Zap className="w-4 h-4 mr-2" />
-                  Trusted by 2,500+ Service Businesses
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  14-Day Free Trial • No Credit Card Required
                 </span>
               </motion.div>
               
@@ -267,13 +208,13 @@ export default function HomePageClient() {
               >
                 <Link href="/signup">
                   <Button size="lg" className="gradient-primary shadow-glow hover:shadow-glow-lg transition-all duration-300 group">
-                    Start 14-Day Trial
+                    Choose Your Plan & Start Trial
                     <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
                   </Button>
                 </Link>
-                <Link href="#demo">
+                <Link href="#pricing">
                   <Button variant="outline" size="lg" className="glass hover:bg-primary/5 transition-all duration-300">
-                    Schedule Demo
+                    View Pricing Plans
                   </Button>
                 </Link>
               </motion.div>
@@ -324,7 +265,7 @@ export default function HomePageClient() {
                         <div className="text-xs text-green-500">+15% this week</div>
                       </div>
                       <div className="bg-green-500/10 rounded-lg p-4">
-                        <div className="text-2xl font-bold text-green-500">$3,240</div>
+                        <div className="text-2xl font-bold text-green-500">€3,240</div>
                         <div className="text-sm text-muted-foreground">Today's Revenue</div>
                         <div className="text-xs text-green-500">+22% vs yesterday</div>
                       </div>
@@ -353,7 +294,7 @@ export default function HomePageClient() {
                             <div className="text-sm font-medium">HVAC Maintenance - Medical Center</div>
                             <div className="text-xs text-muted-foreground">Sarah M. • Completed</div>
                           </div>
-                          <div className="text-xs text-green-500 font-medium">$450</div>
+                          <div className="text-xs text-green-500 font-medium">€450</div>
                         </div>
                       </div>
                     </div>
@@ -437,7 +378,7 @@ export default function HomePageClient() {
       </section>
 
       {/* Pricing Section */}
-      <section className="py-24 bg-gradient-to-b from-muted/10 to-background">
+      <section id="pricing" className="py-24 bg-gradient-to-b from-muted/10 to-background">
         <motion.div
           initial={{ opacity: 0, y: 50 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -447,24 +388,24 @@ export default function HomePageClient() {
         >
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold mb-4">
-              Professional Pricing for <span className="text-gradient">Growing Businesses</span>
+              Choose Your <span className="text-gradient">Perfect Plan</span>
             </h2>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Choose the plan that fits your business size. All plans include 14-day free trial.
+              Start with a 14-day free trial. No credit card required. Upgrade, downgrade, or cancel anytime.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
-            {pricingPlans.map((plan: any, index: number) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
+            {Object.entries(PLAN_CONFIGS).map(([planType, plan], index) => (
               <motion.div
-                key={plan.name}
+                key={planType}
                 initial={{ opacity: 0, y: 30 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.6, delay: index * 0.1 }}
                 className="relative w-full"
               >
-                {plan.popular && (
+                {plan.isPopular && (
                   <div className="absolute z-10 -top-4 left-1/2 transform -translate-x-1/2 w-full max-w-[200px]">
                     <span className="block text-center bg-gradient-to-r from-primary to-blue-600 text-white px-3 py-1 rounded-full text-xs font-medium truncate">
                       Most Popular
@@ -472,21 +413,30 @@ export default function HomePageClient() {
                   </div>
                 )}
                 
-                <Card className={`glass ${plan.color} h-full relative overflow-hidden group hover:shadow-glow transition-all duration-300`}>
+                <Card className={`glass ${plan.isPopular ? 'border-primary/50 shadow-glow' : 'border-border/50'} h-full relative overflow-hidden group hover:shadow-glow transition-all duration-300`}>
                   <CardHeader className="text-center pb-8">
                     <CardTitle className="text-2xl font-bold">{plan.name}</CardTitle>
                     <p className="text-muted-foreground text-sm min-h-[48px]">{plan.description}</p>
                     <div className="mt-4">
-                      <span className="text-4xl font-bold text-gradient">{plan.price}</span>
-                      {plan.period && (
-                        <span className="text-muted-foreground ml-2 text-sm">/{plan.period}</span>
+                      {plan.price > 0 ? (
+                        <>
+                          <span className="text-4xl font-bold text-gradient">{plan.price}€</span>
+                          <span className="text-muted-foreground ml-2 text-sm">/month</span>
+                        </>
+                      ) : (
+                        <span className="text-4xl font-bold text-gradient">Custom</span>
                       )}
                     </div>
+                    {plan.maxUsers > 0 && (
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Up to {plan.maxUsers} {plan.maxUsers === 1 ? 'user' : 'users'}
+                      </p>
+                    )}
                   </CardHeader>
                   
                   <CardContent className="space-y-4">
                     <ul className="space-y-3">
-                      {plan.features.map((feature: any, featureIndex: number) => (
+                      {plan.features.map((feature, featureIndex) => (
                         <li key={featureIndex} className="flex items-center gap-3">
                           <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
                           <span className="text-sm">{feature}</span>
@@ -495,12 +445,14 @@ export default function HomePageClient() {
                     </ul>
                     
                     <div className="pt-6">
-                      <Button 
-                        className={`w-full ${plan.popular ? 'gradient-primary shadow-glow' : 'glass hover:bg-primary/5'}`}
-                        variant={plan.popular ? 'default' : 'outline'}
-                      >
-                        {plan.cta}
-                      </Button>
+                      <Link href={`/signup?plan=${planType.toLowerCase()}`}>
+                        <Button 
+                          className={`w-full ${plan.isPopular ? 'gradient-primary shadow-glow' : 'glass hover:bg-primary/5'}`}
+                          variant={plan.isPopular ? 'default' : 'outline'}
+                        >
+                          {planType === PlanType.ENTERPRISE ? 'Contact Sales' : 'Start 14-Day Trial'}
+                        </Button>
+                      </Link>
                     </div>
                   </CardContent>
                 </Card>
@@ -510,10 +462,10 @@ export default function HomePageClient() {
           
           <div className="text-center mt-12">
             <p className="text-muted-foreground mb-4">
-              Need a custom solution? We'll build it for you.
+              Need help choosing? Our team is here to help you find the perfect plan.
             </p>
             <Button variant="outline" className="glass hover:bg-primary/5">
-              Contact Sales Team
+              Schedule a Demo
               <ArrowUpRight className="ml-2 w-4 h-4" />
             </Button>
           </div>
@@ -648,7 +600,7 @@ export default function HomePageClient() {
             >
               <Link href="/signup">
                 <Button size="lg" className="gradient-primary shadow-glow-lg text-lg px-8 py-4 group">
-                  Start Your Free Trial
+                  Choose Your Plan & Start Trial
                   <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </Button>
               </Link>
@@ -658,11 +610,9 @@ export default function HomePageClient() {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
             >
-              <Link href="#demo">
-                <Button variant="outline" size="lg" className="glass hover:bg-primary/5 text-lg px-8 py-4">
-                  Schedule Demo
-                </Button>
-              </Link>
+              <Button variant="outline" size="lg" className="glass hover:bg-primary/5 text-lg px-8 py-4">
+                Schedule Demo
+              </Button>
             </motion.div>
           </div>
           

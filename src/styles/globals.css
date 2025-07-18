@@ -1,5 +1,10 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "ol/ol.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -96,6 +101,7 @@
   
   html {
     @apply scroll-smooth;
+    background-color: oklch(0.098 0.015 240); /* Ensure dark background */
   }
   
   body {
@@ -220,4 +226,375 @@
   .border-gradient {
     border-image: linear-gradient(135deg, oklch(0.682 0.195 240), oklch(0.578 0.165 270)) 1;
   }
+}
+
+/* Mobile-first optimizations for FixFlow */
+
+/* Touch-friendly button sizes */
+@media (max-width: 768px) {
+  .mobile-button {
+    min-height: 48px;
+    min-width: 48px;
+    padding: 12px 24px;
+    font-size: 16px;
+    font-weight: 600;
+  }
+  
+  .mobile-button-large {
+    min-height: 56px;
+    padding: 16px 32px;
+    font-size: 18px;
+    border-radius: 16px;
+  }
+  
+  /* Larger touch targets for navigation */
+  .mobile-nav-item {
+    min-height: 64px;
+    padding: 16px 24px;
+    margin-bottom: 12px;
+    border-radius: 16px;
+  }
+  
+  /* Easy scrolling with momentum */
+  .mobile-scroll {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+  
+  /* Prevent zoom on input focus */
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="tel"],
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+/* Task-focused card styles */
+.task-card {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(8px);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 24px;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.task-card:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(59, 130, 246, 0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+.task-card-urgent {
+  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.task-card-completed {
+  opacity: 0.7;
+  background: rgba(34, 197, 94, 0.05);
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+/* Clock in/out button styles */
+.clock-button {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border: none;
+  border-radius: 20px;
+  color: white;
+  font-size: 18px;
+  font-weight: 700;
+  min-height: 60px;
+  padding: 20px 40px;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+}
+
+.clock-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(16, 185, 129, 0.4);
+}
+
+.clock-button:active {
+  transform: translateY(0);
+}
+
+.clock-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.clock-button:hover::before {
+  left: 100%;
+}
+
+/* Income tracker styles */
+.income-display {
+  font-size: 2.5rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-align: center;
+  margin: 16px 0;
+}
+
+@media (max-width: 768px) {
+  .income-display {
+    font-size: 2rem;
+  }
+}
+
+/* Solo operator specific styles */
+.solo-dashboard {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.solo-task-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 768px) {
+  .solo-task-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Field worker dashboard styles */
+.field-worker-dashboard {
+  padding: 16px;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.job-card {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(10px);
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 24px;
+  margin-bottom: 16px;
+  transition: all 0.3s ease;
+}
+
+.job-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
+.job-status-pending {
+  border-left: 4px solid #f59e0b;
+}
+
+.job-status-progress {
+  border-left: 4px solid #3b82f6;
+}
+
+.job-status-completed {
+  border-left: 4px solid #10b981;
+}
+
+/* Fast loading animations */
+.fade-in-up {
+  animation: fadeInUp 0.6s ease-out;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.slide-in-left {
+  animation: slideInLeft 0.5s ease-out;
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Quick action buttons */
+.quick-action {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 20px;
+  text-align: center;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  color: inherit;
+  text-decoration: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  min-height: 120px;
+  justify-content: center;
+}
+
+.quick-action:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(59, 130, 246, 0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+.quick-action-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(59, 130, 246, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+/* Progress indicators */
+.progress-ring {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: conic-gradient(#3b82f6 0deg, #1e40af 180deg, #ddd6fe 360deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.progress-ring::before {
+  content: '';
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--background);
+  position: absolute;
+}
+
+.progress-text {
+  position: relative;
+  z-index: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: #3b82f6;
+}
+
+/* Responsive font sizes */
+@media (max-width: 640px) {
+  .text-responsive-lg {
+    font-size: 1.5rem;
+  }
+  
+  .text-responsive-xl {
+    font-size: 1.75rem;
+  }
+  
+  .text-responsive-2xl {
+    font-size: 2rem;
+  }
+}
+
+@media (min-width: 641px) {
+  .text-responsive-lg {
+    font-size: 1.75rem;
+  }
+  
+  .text-responsive-xl {
+    font-size: 2rem;
+  }
+  
+  .text-responsive-2xl {
+    font-size: 2.5rem;
+  }
+}
+
+/* Swipe gestures hint */
+.swipe-hint {
+  position: relative;
+}
+
+.swipe-hint::after {
+  content: '← Swipe for more →';
+  position: absolute;
+  bottom: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+  animation: fadeInOut 3s infinite;
+}
+
+@keyframes fadeInOut {
+  0%, 50%, 100% { opacity: 0.4; }
+  25%, 75% { opacity: 0.8; }
+}
+
+/* Custom OpenLayers Attribution Styling */
+.ol-attribution.custom-attribution {
+  background: rgba(10, 10, 11, 0.6);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem; /* text-xs */
+  color: #A1A1AA; /* muted-foreground */
+  backdrop-filter: blur(8px);
+  bottom: 0.5em; /* Adjust from default 0 */
+  right: 0.5em; /* Adjust from default 0 */
+  left: auto; /* Ensure it stays on the right */
+}
+
+.ol-attribution.custom-attribution a {
+  color: #3B82F6; /* primary color */
+  text-decoration: none;
+}
+
+.ol-attribution.custom-attribution a:hover {
+  text-decoration: underline;
+}
+
+.ol-attribution.custom-attribution ul {
+  margin: 0; /* Remove default list margin */
+  padding: 0; /* Remove default list padding */
+}
+
+.ol-attribution.custom-attribution li {
+  display: inline; /* Display list items inline */
+  margin: 0; /* Remove default list item margin */
+  padding: 0; /* Remove default list item padding */
+}
+
+.ol-attribution.custom-attribution li:not(:last-child)::after {
+  content: " | "; /* Add a separator between list items */
+  color: #71717A; /* text-muted */
 }

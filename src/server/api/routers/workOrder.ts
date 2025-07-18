@@ -1,111 +1,167 @@
 import { z } from "zod";
-import { WorkOrderStatus, WorkOrderPriority, UserRole } from "~/lib/types";
 import { TRPCError } from "@trpc/server";
-
+import type {
+  WorkOrderPriority} from "@/lib/types";
+import {
+  type WorkOrderBase,
+  type WorkOrderWithRelations,
+  type WorkOrderQueryFilters,
+  type WorkOrderCreateData,
+  type WorkOrderResponse,
+  type WorkOrderStats,
+  type PaginatedResponse,
+  UserRole,
+  type ExtendedUser,
+  WorkOrderStatus
+} from "@/lib/types";
 import {
   createTRPCRouter,
   protectedProcedure,
-} from "~/server/api/trpc";
+} from "@/server/api/trpc";
+
+// Helper function to check user access
+const checkUserAccess = (userRole: UserRole, allowedRoles: UserRole[]) => {
+  return allowedRoles.includes(userRole);
+};
 
 // Input schemas
-const workOrderCreateSchema = z.object({
-  title: z.string().min(1, "Title is required"),
-  description: z.string().optional(),
-  customerId: z.string().min(1, "Customer is required"),
-  assignedToId: z.string().optional(),
-  priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).default("MEDIUM"),
-  estimatedHours: z.number().positive().optional(),
-  amount: z.number().positive().optional(),
-  scheduledDate: z.date().optional(),
-  location: z.string().optional(),
-  notes: z.string().optional(),
-});
-
-const workOrderUpdateSchema = z.object({
-  id: z.string(),
-  title: z.string().optional(),
-  description: z.string().optional(),
-  status: z.enum(["PENDING", "ASSIGNED", "IN_PROGRESS", "COMPLETED", "CANCELLED"]).optional(),
-  priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).optional(),
-  assignedToId: z.string().optional(),
-  estimatedHours: z.number().positive().optional(),
-  amount: z.number().positive().optional(),
-  scheduledDate: z.date().optional(),
-  completedDate: z.date().optional(),
-  location: z.string().optional(),
-  notes: z.string().optional(),
-});
-
-const workOrderFilterSchema = z.object({
-  status: z.enum(["PENDING", "ASSIGNED", "IN_PROGRESS", "COMPLETED", "CANCELLED"]).optional(),
-  priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).optional(),
+const listWorkOrdersSchema = z.object({
+  limit: z.number().min(1).max(100).default(50),
+  cursor: z.string().optional(),
+  status: z.enum(['PENDING', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']).optional(),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
   assignedToId: z.string().optional(),
   customerId: z.string().optional(),
   search: z.string().optional(),
-  limit: z.number().min(1).max(100).default(10),
-  cursor: z.string().optional(),
 });
 
+const createWorkOrderSchema = z.object({
+  title: z.string().min(1, 'Title is required'),
+  description: z.string().optional(),
+  customerId: z.string().min(1, 'Customer is required'),
+  assignedToId: z.string().optional(),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).default('MEDIUM'),
+  estimatedHours: z.number().optional(),
+  amount: z.number().optional(),
+  location: z.string().optional(),
+  notes: z.string().optional(),
+  scheduledDate: z.date().optional(),
+});
+
+const updateWorkOrderSchema = z.object({
+  id: z.string().min(1, 'Work order ID is required'),
+  title: z.string().optional(),
+  description: z.string().optional().nullable(),
+  status: z.enum(['PENDING', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']).optional(),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
+  assignedToId: z.string().optional().nullable(),
+  estimatedHours: z.number().optional().nullable(),
+  amount: z.number().optional().nullable(),
+  location: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+  scheduledDate: z.date().optional().nullable(),
+  completedDate: z.date().optional().nullable(), // Add this line
+});
+
+// Define specific types for work order-related operations
+type WorkOrderCreateInput = {
+  title: string;
+  customerId: string;
+  priority?: WorkOrderPriority;
+  description?: string;
+  amount?: number;
+  notes?: string;
+  estimatedHours?: number;
+  scheduledDate?: Date;
+  location?: string;
+  assignedToId?: string;
+};
+
+type WorkOrderUpdateInput = Partial<WorkOrderCreateInput> & {
+  id: string;
+};
+
 export const workOrderRouter = createTRPCRouter({
-  // Get all work orders with filtering and pagination
-  getAll: protectedProcedure
-    .input(workOrderFilterSchema)
+  list: protectedProcedure
+    .input(listWorkOrdersSchema)
     .query(async ({ ctx, input }) => {
-      const { limit, cursor, status, search, assignedToId, customerId } = input;
+      const { limit, cursor, status, priority, assignedToId, customerId, search } = input;
       const userId = ctx.session.user.id;
-      const userRole = (ctx.session.user as any).role || UserRole.ADMIN;
+      const userRole = (ctx.session.user as any).role || UserRole.EMPLOYEE;
 
       try {
-        // Check if database models are available
-        if (!ctx.db || !(ctx.db as any).workOrder) {
-          throw new Error('Database models not available');
-        }
+        // Build where clause
+        const where: any = {
+          companyId: ctx.session.user.companyId, // Add companyId filter
+        };
 
-        // Build where clause based on role and filters
-        const where: any = {};
-
-        // Role-based filtering
-        if (userRole === UserRole.CLIENT) {
-          // Clients can only see work orders for customers they created
-          where.customer = { createdById: userId };
-        } else if (userRole === UserRole.TECHNICIAN) {
-          // Technicians can only see work orders assigned to them
-          where.assignedToId = userId;
-        }
-        // Admins can see all work orders
-
-        // Apply additional filters
+        // Filter by status
         if (status) {
           where.status = status;
         }
+
+        // Filter by priority
+        if (priority) {
+          where.priority = priority;
+        }
+
+        // Filter by assigned user
         if (assignedToId) {
           where.assignedToId = assignedToId;
         }
+
+        // Filter by customer
         if (customerId) {
           where.customerId = customerId;
         }
+
+        // Search in title and description
         if (search) {
           where.OR = [
             { title: { contains: search, mode: 'insensitive' } },
             { description: { contains: search, mode: 'insensitive' } },
-            { location: { contains: search, mode: 'insensitive' } },
-            { customer: { name: { contains: search, mode: 'insensitive' } } },
           ];
         }
 
-        // Handle cursor-based pagination
-        const cursorOptions = cursor ? { cursor: { id: cursor }, skip: 1 } : {};
+        // Role-based filtering
+        if (userRole === UserRole.EMPLOYEE || userRole === UserRole.TECHNICIAN) {
+          where.assignedToId = userId;
+        }
 
-        const workOrders = await (ctx.db as any).workOrder.findMany({
+        // Handle cursor-based pagination
+        const cursorOptions = cursor ? { cursor: { id: cursor }, skip: 1 } : undefined;
+
+        // Fetch work orders
+        const workOrders = await ctx.db.workOrder.findMany({
+          ...cursorOptions,
           where,
-          include: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            status: true,
+            priority: true,
+            estimatedHours: true,
+            actualHours: true,
+            amount: true,
+            scheduledDate: true,
+            completedDate: true,
+            location: true,
+            notes: true,
+            createdAt: true,
+            updatedAt: true,
+            companyId: true,
+            customerId: true,
+            assignedToId: true,
+            createdById: true,
+            type: true, // Ensure type is selected
             customer: {
               select: {
                 id: true,
                 name: true,
                 email: true,
                 phone: true,
-                type: true,
+                address: true,
               },
             },
             assignedTo: {
@@ -122,121 +178,264 @@ export const workOrderRouter = createTRPCRouter({
                 email: true,
               },
             },
-            team: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
           },
-          orderBy: { createdAt: 'desc' },
-          take: limit + 1, // Take one extra to check if there are more
-          ...cursorOptions,
+          orderBy: {
+            createdAt: 'desc',
+          },
+          take: limit + 1,
         });
 
-        let nextCursor: string | undefined = undefined;
-        if (workOrders.length > limit) {
-          const nextItem = workOrders.pop();
-          nextCursor = nextItem!.id;
-        }
+        // Return paginated results
+        const hasNextPage = workOrders.length > limit;
+        const nextCursor = hasNextPage ? workOrders[workOrders.length - 1]?.id : undefined;
 
         return {
-          workOrders,
+          items: workOrders.slice(0, limit) as WorkOrderResponse[],
           nextCursor,
+          hasMore: hasNextPage,
         };
       } catch (error) {
-        console.error('Error fetching work orders:', error);
-        // Return empty result if database fails
-        return {
-          workOrders: [],
-          nextCursor: undefined,
-        };
+        console.error('Failed to fetch work orders:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to fetch work orders',
+        });
       }
     }),
 
-  // Get work order statistics
   getStats: protectedProcedure
     .query(async ({ ctx }) => {
       const userId = ctx.session.user.id;
-      const userRole = (ctx.session.user as any).role || UserRole.ADMIN;
+      const userRole = (ctx.session.user as any).role || UserRole.EMPLOYEE;
 
       try {
-        // Check if database models are available
-        if (!ctx.db || !(ctx.db as any).workOrder) {
-          throw new Error('Database models not available');
-        }
+        // Build where clause
+        const where: any = {
+          companyId: ctx.session.user.companyId, // Add companyId filter
+        };
 
-        // Build where clause based on role
-        const where: any = {};
-        
-        if (userRole === UserRole.CLIENT) {
-          where.customer = { createdById: userId };
-        } else if (userRole === UserRole.TECHNICIAN) {
+        // Role-based filtering
+        if (userRole === UserRole.EMPLOYEE || userRole === UserRole.TECHNICIAN) {
           where.assignedToId = userId;
         }
 
-        const [total, pending, assigned, inProgress, completed, cancelled] = await Promise.all([
-          (ctx.db as any).workOrder.count({ where }),
-          (ctx.db as any).workOrder.count({ where: { ...where, status: 'PENDING' } }),
-          (ctx.db as any).workOrder.count({ where: { ...where, status: 'ASSIGNED' } }),
-          (ctx.db as any).workOrder.count({ where: { ...where, status: 'IN_PROGRESS' } }),
-          (ctx.db as any).workOrder.count({ where: { ...where, status: 'COMPLETED' } }),
-          (ctx.db as any).workOrder.count({ where: { ...where, status: 'CANCELLED' } }),
-        ]);
-
-        const totalValueResult = await (ctx.db as any).workOrder.aggregate({
-          where: { ...where, status: { not: 'CANCELLED' } },
-          _sum: { amount: true },
+        // Get work order counts by status
+        const stats = await ctx.db.workOrder.groupBy({
+          by: ['status'],
+          where,
+          _count: true,
         });
 
-        return {
-          total,
-          pending,
-          assigned,
-          inProgress,
-          completed,
-          cancelled,
-          totalValue: totalValueResult._sum.amount || 0,
+        // Calculate total value from completed work orders
+        const totalValue = await ctx.db.workOrder.aggregate({
+          where: {
+            ...where,
+            status: 'COMPLETED',
+            amount: { not: null },
+          },
+          _sum: {
+            amount: true,
+          },
+        });
+
+        // Format stats
+        const workOrderStats: WorkOrderStats = {
+          total: stats.reduce((sum: number, stat: { _count: number }) => sum + stat._count, 0),
+          pending: stats.find((s: { status: WorkOrderStatus; _count: number }) => s.status === 'PENDING')?._count || 0,
+          assigned: stats.find((s: { status: WorkOrderStatus; _count: number }) => s.status === 'ASSIGNED')?._count || 0,
+          inProgress: stats.find((s: { status: WorkOrderStatus; _count: number }) => s.status === 'IN_PROGRESS')?._count || 0,
+          completed: stats.find((s: { status: WorkOrderStatus; _count: number }) => s.status === 'COMPLETED')?._count || 0,
+          cancelled: stats.find((s: { status: WorkOrderStatus; _count: number }) => s.status === 'CANCELLED')?._count || 0,
+          totalValue: totalValue._sum.amount || 0,
         };
+
+        return workOrderStats;
       } catch (error) {
-        console.error('Error fetching work order stats:', error);
-        // Return default stats if database fails
-        return {
-          total: 0,
-          pending: 0,
-          assigned: 0,
-          inProgress: 0,
-          completed: 0,
-          cancelled: 0,
-          totalValue: 0,
-        };
+        console.error('Failed to fetch work order stats:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to fetch work order statistics',
+        });
       }
     }),
 
-  // Get a single work order by ID
   getById: protectedProcedure
-    .input(z.object({ id: z.string() }))
+    .input(z.object({ id: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
-      const userRole = (ctx.session.user as any).role || UserRole.ADMIN;
+      const userRole = (ctx.session.user as any).role || UserRole.EMPLOYEE;
 
       try {
-        // Check if database models are available
-        if (!ctx.db || !(ctx.db as any).workOrder) {
-          throw new Error('Database models not available');
-        }
+        // Build where clause
+        const where: any = {
+          id: input.id,
+          companyId: ctx.session.user.companyId, // Add companyId filter
+        };
 
-        const where: any = { id: input.id };
-
-        // Role-based access control
-        if (userRole === UserRole.CLIENT) {
-          where.customer = { createdById: userId };
-        } else if (userRole === UserRole.TECHNICIAN) {
+        // Role-based filtering
+        if (userRole === UserRole.EMPLOYEE || userRole === UserRole.TECHNICIAN) {
           where.assignedToId = userId;
         }
 
-        const workOrder = await (ctx.db as any).workOrder.findFirst({
+        // Fetch work order
+        const workOrder = await ctx.db.workOrder.findFirst({
           where,
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            status: true,
+            priority: true,
+            estimatedHours: true,
+            actualHours: true,
+            amount: true,
+            scheduledDate: true,
+            completedDate: true,
+            location: true,
+            notes: true,
+            createdAt: true,
+            updatedAt: true,
+            companyId: true,
+            customerId: true,
+            assignedToId: true,
+            createdById: true,
+            type: true, // Ensure type is selected
+            customer: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                phone: true,
+                address: true,
+              },
+            },
+            assignedTo: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+            createdBy: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        });
+
+        if (!workOrder) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Work order not found',
+          });
+        }
+
+        return workOrder;
+      } catch (error) {
+        if (error instanceof TRPCError) {
+          throw error;
+        }
+        console.error('Failed to fetch work order:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to fetch work order',
+        });
+      }
+    }),
+
+  create: protectedProcedure
+    .input(
+      z.object({
+        title: z.string().min(2, 'Title must be at least 2 characters'),
+        customerId: z.string(),
+        priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
+        description: z.string().optional(),
+        amount: z.number().optional(),
+        notes: z.string().optional(),
+        estimatedHours: z.number().optional(),
+        scheduledDate: z.date().optional(),
+        location: z.string().optional(),
+        assignedToId: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Validate user role
+      const userRole = ctx.session?.user?.role ?? 'EMPLOYEE';
+      if (!['OWNER', 'MANAGER', 'ADMIN'].includes(userRole)) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'You do not have permission to create work orders',
+        });
+      }
+
+      try {
+        const workOrder = await ctx.db.workOrder.create({
+          data: {
+            ...input,
+            companyId: ctx.session.user.companyId!, // Non-null assertion
+            createdById: ctx.session.user.id, // Non-null assertion
+            status: 'PENDING' as WorkOrderStatus,
+          },
+        });
+
+        return workOrder;
+      } catch (error) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to create work order',
+          cause: error,
+        });
+      }
+    }),
+
+  update: protectedProcedure
+    .input(updateWorkOrderSchema)
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      const userRole = (ctx.session.user as any).role || UserRole.EMPLOYEE;
+
+      try {
+        // Get existing work order
+        const workOrder = await ctx.db.workOrder.findUnique({
+          where: {
+            id: input.id,
+            companyId: ctx.session.user.companyId, // Add companyId filter
+          },
+        });
+
+        if (!workOrder) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: 'Work order not found',
+          });
+        }
+
+        // Check permissions
+        const canUpdate = userRole === UserRole.OWNER ||
+          userRole === UserRole.MANAGER ||
+          userRole === UserRole.ADMIN ||
+          workOrder.assignedToId === userId;
+
+        if (!canUpdate) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'You do not have permission to update this work order',
+          });
+        }
+
+        // Update work order
+        const updatedWorkOrder = await ctx.db.workOrder.update({
+          where: { id: input.id },
+          data: {
+            ...input,
+            id: undefined,
+            // Ensure completedDate is only set if status is completed
+            ...(input.status === WorkOrderStatus.COMPLETED && !workOrder.completedDate && { completedDate: new Date() }),
+            ...(input.status !== WorkOrderStatus.COMPLETED && workOrder.completedDate && { completedDate: null }),
+          },
           include: {
             customer: {
               select: {
@@ -245,132 +444,6 @@ export const workOrderRouter = createTRPCRouter({
                 email: true,
                 phone: true,
                 address: true,
-                city: true,
-                state: true,
-                zipCode: true,
-                type: true,
-              },
-            },
-            assignedTo: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                phone: true,
-              },
-            },
-            createdBy: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-            team: {
-              select: {
-                id: true,
-                name: true,
-                description: true,
-              },
-            },
-            invoices: {
-              select: {
-                id: true,
-                number: true,
-                status: true,
-                amount: true,
-                total: true,
-              },
-            },
-          },
-        });
-
-        if (!workOrder) {
-          throw new TRPCError({
-            code: 'NOT_FOUND',
-            message: 'Work order not found',
-          });
-        }
-
-        return workOrder;
-      } catch (error) {
-        if (error instanceof TRPCError) {
-          throw error;
-        }
-        console.error('Error fetching work order:', error);
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to fetch work order',
-        });
-      }
-    }),
-
-  // Create a new work order
-  create: protectedProcedure
-    .input(workOrderCreateSchema)
-    .mutation(async ({ ctx, input }) => {
-      const userId = ctx.session.user.id;
-      const userRole = (ctx.session.user as any).role || UserRole.ADMIN;
-
-      // Only admins and technicians can create work orders
-      if (userRole === UserRole.CLIENT) {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'Clients cannot create work orders directly',
-        });
-      }
-
-      try {
-        // Check if database models are available
-        if (!ctx.db || !(ctx.db as any).workOrder || !(ctx.db as any).customer) {
-          throw new Error('Database models not available');
-        }
-
-        // Verify customer exists and user has access
-        const customer = await (ctx.db as any).customer.findFirst({
-          where: {
-            id: input.customerId,
-            ...(userRole === UserRole.CLIENT ? { createdById: userId } : {}),
-          },
-        });
-
-        if (!customer) {
-          throw new TRPCError({
-            code: 'NOT_FOUND',
-            message: 'Customer not found',
-          });
-        }
-
-        // Verify assigned user exists if provided
-        if (input.assignedToId) {
-          const assignedUser = await (ctx.db as any).user.findFirst({
-            where: {
-              id: input.assignedToId,
-              isActive: true,
-            },
-          });
-
-          if (!assignedUser) {
-            throw new TRPCError({
-              code: 'NOT_FOUND',
-              message: 'Assigned user not found',
-            });
-          }
-        }
-
-        const workOrder = await (ctx.db as any).workOrder.create({
-          data: {
-            ...input,
-            status: input.assignedToId ? WorkOrderStatus.ASSIGNED : WorkOrderStatus.PENDING,
-            createdById: userId,
-          },
-          include: {
-            customer: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                phone: true,
               },
             },
             assignedTo: {
@@ -390,100 +463,9 @@ export const workOrderRouter = createTRPCRouter({
           },
         });
 
-        return workOrder;
+        return updatedWorkOrder;
       } catch (error) {
-        if (error instanceof TRPCError) {
-          throw error;
-        }
-        console.error('Error creating work order:', error);
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to create work order',
-        });
-      }
-    }),
-
-  // Update an existing work order
-  update: protectedProcedure
-    .input(workOrderUpdateSchema)
-    .mutation(async ({ ctx, input }) => {
-      const userId = ctx.session.user.id;
-      const userRole = (ctx.session.user as any).role || UserRole.ADMIN;
-
-      try {
-        // Check if database models are available
-        if (!ctx.db || !(ctx.db as any).workOrder) {
-          throw new Error('Database models not available');
-        }
-
-        // Check if work order exists and user has access
-        const existingWorkOrder = await (ctx.db as any).workOrder.findFirst({
-          where: {
-            id: input.id,
-            ...(userRole === UserRole.CLIENT ? { customer: { createdById: userId } } : {}),
-            ...(userRole === UserRole.TECHNICIAN ? { assignedToId: userId } : {}),
-          },
-        });
-
-        if (!existingWorkOrder) {
-          throw new TRPCError({
-            code: 'NOT_FOUND',
-            message: 'Work order not found',
-          });
-        }
-
-        // Technicians can only update status and completion-related fields
-        const updateData: any = {};
-        if (userRole === UserRole.TECHNICIAN) {
-          if (input.status) updateData.status = input.status;
-          if (input.notes) updateData.notes = input.notes;
-          if (input.completedDate) updateData.completedDate = input.completedDate;
-        } else {
-          // Admins can update all fields
-          Object.assign(updateData, input);
-          delete updateData.id; // Remove id from update data
-        }
-
-        // If status is being set to COMPLETED, set completedDate
-        if (updateData.status === WorkOrderStatus.COMPLETED && !updateData.completedDate) {
-          updateData.completedDate = new Date();
-        }
-
-        const workOrder = await (ctx.db as any).workOrder.update({
-          where: { id: input.id },
-          data: updateData,
-          include: {
-            customer: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                phone: true,
-              },
-            },
-            assignedTo: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-            createdBy: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-          },
-        });
-
-        return workOrder;
-      } catch (error) {
-        if (error instanceof TRPCError) {
-          throw error;
-        }
-        console.error('Error updating work order:', error);
+        console.error('Failed to update work order:', error);
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to update work order',
@@ -491,48 +473,30 @@ export const workOrderRouter = createTRPCRouter({
       }
     }),
 
-  // Delete a work order
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const userId = ctx.session.user.id;
-      const userRole = (ctx.session.user as any).role || UserRole.ADMIN;
+      const userRole = (ctx.session.user as any).role || UserRole.EMPLOYEE;
 
       // Only admins can delete work orders
-      if (userRole !== UserRole.ADMIN) {
+      if (!checkUserAccess(userRole, [UserRole.OWNER, UserRole.MANAGER, UserRole.ADMIN])) {
         throw new TRPCError({
           code: 'FORBIDDEN',
-          message: 'Only administrators can delete work orders',
+          message: 'You do not have permission to delete work orders',
         });
       }
 
       try {
-        // Check if database models are available
-        if (!ctx.db || !(ctx.db as any).workOrder) {
-          throw new Error('Database models not available');
-        }
-
-        const workOrder = await (ctx.db as any).workOrder.findUnique({
-          where: { id: input.id },
-        });
-
-        if (!workOrder) {
-          throw new TRPCError({
-            code: 'NOT_FOUND',
-            message: 'Work order not found',
-          });
-        }
-
-        await (ctx.db as any).workOrder.delete({
-          where: { id: input.id },
+        await ctx.db.workOrder.delete({
+          where: {
+            id: input.id,
+            companyId: ctx.session.user.companyId, // Add companyId filter
+          },
         });
 
         return { success: true };
       } catch (error) {
-        if (error instanceof TRPCError) {
-          throw error;
-        }
-        console.error('Error deleting work order:', error);
+        console.error('Failed to delete work order:', error);
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to delete work order',

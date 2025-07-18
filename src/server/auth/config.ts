@@ -1,129 +1,69 @@
-import { type DefaultSession, type NextAuthConfig } from "next-auth";
-import Credentials from "next-auth/providers/credentials";
-import { db } from "~/server/db";
-import bcrypt from "bcryptjs";
-import { type UserRole } from "~/lib/types";
+import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { UserRole } from '@/lib/types';
+import { Session } from '@supabase/supabase-js';
+import { z } from 'zod';
 
-// Define the expected user type from Prisma
-interface PrismaUserWithRole {
-  id: string;
-  name: string | null;
-  email: string | null;
-  image: string | null;
-  password: string | null;
-  role: UserRole;
+// Zod schema for user validation
+const UserSchema = z.object({
+  id: z.string(),
+  email: z.string().email().optional(),
+  role: z.nativeEnum(UserRole).optional(),
+  companyId: z.string().optional().nullable(),
+});
+
+export async function validateUserSession(
+  session: Session | null, 
+  getCookies?: () => any
+) {
+  if (!session?.user?.id) return { isValid: false, userRole: null };
+
+  try {
+    const supabase = await createServerSupabaseClient();
+    const { data: userData, error } = await supabase
+      .from('users')
+      .select('role, companyId')
+      .eq('id', session.user.id)
+      .single();
+
+    if (error || !userData) return null;
+
+    return {
+      ...session.user,
+      role: userData.role as UserRole,
+      companyId: userData.companyId,
+    };
+  } catch (err) {
+    console.error('Session validation error:', err);
+    return null;
+  }
 }
 
-/**
- * Module augmentation for `next-auth` types. Allows us to add custom properties to the `session`
- * object and keep type safety.
- *
- * @see https://next-auth.js.org/getting-started/typescript#module-augmentation
- */
-declare module "next-auth" {
-  interface Session extends DefaultSession {
-    user: {
-      id: string;
-      role: UserRole;
-    } & DefaultSession["user"];
-  }
+export async function getUserRoleFromDatabase(
+  userId: string, 
+  getCookies?: () => any
+): Promise<UserRole | null> {
+  try {
+    const supabase = await createServerSupabaseClient();
+    const { data, error } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', userId)
+      .single();
 
-  interface User {
-    id?: string;
-    name?: string | null;
-    email?: string | null;
-    image?: string | null;
-    role: UserRole;
+    if (error || !data) return null;
+    return data.role as UserRole;
+  } catch (err) {
+    console.error('Role retrieval error:', err);
+    return null;
   }
 }
 
-/**
- * Options for NextAuth.js used to configure adapters, providers, callbacks, etc.
- *
- * @see https://next-auth.js.org/configuration/options
- */
-export const authOptions = {
-  secret: process.env.NEXTAUTH_SECRET,
-  debug: true,
-  cookies: {
-    sessionToken: {
-      name: `next-auth.session-token`,
-      options: {
-        httpOnly: true,
-        sameSite: 'lax',
-        path: '/',
-        secure: process.env.NODE_ENV === "production",
-      },
-    },
-  },
-  providers: [
-    Credentials({
-      name: "Credentials",
-      credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" },
-      },
-      authorize: async (credentials) => {
-        if (!credentials?.email || !credentials?.password) {
-          return null;
-        }
+export function isAuthorized(
+  session: Session | null, 
+  requiredRoles: UserRole[] = []
+): boolean {
+  if (!session) return false;
 
-        const user = await db.user.findUnique({
-          where: { email: credentials.email as string },
-        });
-
-        if (!user?.password) {
-          return null;
-        }
-
-        const isValidPassword = await bcrypt.compare(credentials.password as string, user.password);
-
-        if (!isValidPassword) {
-          return null;
-        }
-
-        // Cast to our interface that includes the role property (using unknown first for type safety)
-        const userWithRole = user as unknown as PrismaUserWithRole;
-        
-        return {
-          id: userWithRole.id,
-          name: userWithRole.name,
-          email: userWithRole.email,
-          image: userWithRole.image,
-          role: userWithRole.role,
-        };
-      },
-    }),
-  ],
-  session: {
-    strategy: "jwt",
-  },
-  pages: {
-    signIn: "/login",
-    signOut: "/login",
-  },
-  callbacks: {
-    jwt: ({ token, user }) => {
-      if (user) {
-        token.id = user.id;
-        token.name = user.name;
-        token.email = user.email;
-        token.role = user.role;
-      }
-      return token;
-    },
-    session: ({ session, token }) => {
-      const newSession = {
-        ...session,
-        user: {
-          ...session.user,
-          id: token.sub!,
-          name: token.name!,
-          email: token.email!,
-          role: token.role as UserRole,
-        },
-      };
-      return newSession;
-    },
-  },
-} satisfies NextAuthConfig;
+  const userRole = session.user?.user_metadata?.role as UserRole;
+  return requiredRoles.length === 0 || requiredRoles.includes(userRole);
+}

@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -49,8 +49,6 @@ const footerLinks = {
   legal: [
     { name: "Privacy Policy", href: "/privacy" },
     { name: "Terms of Service", href: "/terms" },
-    { name: "Cookie Policy", href: "/cookies" },
-    { name: "GDPR", href: "/gdpr" },
   ],
 };
 
@@ -66,12 +64,12 @@ const stats = [
   { label: "Customer Satisfaction", value: "98%" },
 ];
 
-export default function Footer() {
+const Footer = () => {
   return (
-    <footer className="relative bg-gradient-to-b from-background via-muted/20 to-muted/40 border-t border-border/50">
+    <footer className="relative bg-gradient-to-b from-background via-muted/20 to-muted/40 border-t border-border/50 ">
       {/* Background Effects */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(99,102,241,0.05),transparent_70%)]" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(139,92,246,0.03),transparent_70%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(99,102,241,0.05),var(--background)_70%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(139,92,246,0.03),var(--background)_70%)]" />
       
       <motion.div
         variants={footerVariants}
@@ -120,15 +118,15 @@ export default function Footer() {
               <div className="space-y-3">
                 <div className="flex items-center gap-3 text-sm text-muted-foreground">
                   <MapPin className="w-4 h-4 text-primary" />
-                  <span>San Francisco, CA 94102</span>
+                  <span>Helsinki, Finland</span>
                 </div>
                 <div className="flex items-center gap-3 text-sm text-muted-foreground">
                   <Phone className="w-4 h-4 text-primary" />
-                  <span>+1 (555) 123-4567</span>
+                  <span>+358 40 123 4567</span>
                 </div>
                 <div className="flex items-center gap-3 text-sm text-muted-foreground">
                   <Mail className="w-4 h-4 text-primary" />
-                  <span>support@fixflow.com</span>
+                  <span>support@fixflow.fi</span>
                 </div>
               </div>
 
@@ -227,56 +225,7 @@ export default function Footer() {
           </div>
         </div>
 
-        {/* User Roles Section */}
-        <motion.div variants={itemVariants} className="py-12 border-t border-border/30">
-          <div className="text-center mb-8">
-            <h3 className="text-lg font-semibold mb-2">Built for Every Role</h3>
-            <p className="text-sm text-muted-foreground">
-              Tailored experiences for administrators, technicians, and clients
-            </p>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <motion.div
-              whileHover={{ scale: 1.02, y: -2 }}
-              className="glass rounded-xl p-6 text-center space-y-3 hover:shadow-glow transition-all duration-300"
-            >
-              <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto">
-                <Shield className="w-6 h-6 text-primary" />
-              </div>
-              <h4 className="font-medium">Administrators</h4>
-              <p className="text-sm text-muted-foreground">
-                Full system control, user management, and comprehensive analytics
-              </p>
-            </motion.div>
-
-            <motion.div
-              whileHover={{ scale: 1.02, y: -2 }}
-              className="glass rounded-xl p-6 text-center space-y-3 hover:shadow-glow transition-all duration-300"
-            >
-              <div className="w-12 h-12 bg-green-500/10 rounded-lg flex items-center justify-center mx-auto">
-                <Wrench className="w-6 h-6 text-green-500" />
-              </div>
-              <h4 className="font-medium">Technicians</h4>
-              <p className="text-sm text-muted-foreground">
-                Job assignments, mobile access, and real-time status updates
-              </p>
-            </motion.div>
-
-            <motion.div
-              whileHover={{ scale: 1.02, y: -2 }}
-              className="glass rounded-xl p-6 text-center space-y-3 hover:shadow-glow transition-all duration-300"
-            >
-              <div className="w-12 h-12 bg-blue-500/10 rounded-lg flex items-center justify-center mx-auto">
-                <Calendar className="w-6 h-6 text-blue-500" />
-              </div>
-              <h4 className="font-medium">Clients</h4>
-              <p className="text-sm text-muted-foreground">
-                Service requests, progress tracking, and communication tools
-              </p>
-            </motion.div>
-          </div>
-        </motion.div>
+       
 
         {/* Bottom Copyright */}
         <motion.div 
@@ -298,4 +247,6 @@ export default function Footer() {
       </motion.div>
     </footer>
   );
-}
+};
+
+export default Footer;

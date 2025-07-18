@@ -1,395 +1,215 @@
-import { z } from "zod";
-import { CustomerType, UserRole } from "~/lib/types";
-import { TRPCError } from "@trpc/server";
+import { z } from 'zod';
+import { createTRPCRouter, protectedProcedure } from '../trpc';
+import { TRPCError } from '@trpc/server';
+import { type UserRole } from '@/lib/types';
 
-import {
-  createTRPCRouter,
-  protectedProcedure,
-} from "~/server/api/trpc";
+// Define specific types for customer-related operations
+type CustomerCreateInput = {
+  name: string;
+  email: string;
+  phone?: string;
+  address?: string;
+  companyName?: string;
+};
 
-// Input schemas
-const customerCreateSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  email: z.string().email().optional(),
-  phone: z.string().optional(),
-  address: z.string().optional(),
-  city: z.string().optional(),
-  state: z.string().optional(),
-  zipCode: z.string().optional(),
-  type: z.enum(["RESIDENTIAL", "COMMERCIAL", "INDUSTRIAL"]).default("RESIDENTIAL"),
-  notes: z.string().optional(),
-});
-
-const customerUpdateSchema = z.object({
-  id: z.string(),
-  name: z.string().min(1).optional(),
-  email: z.string().email().optional(),
-  phone: z.string().optional(),
-  address: z.string().optional(),
-  city: z.string().optional(),
-  state: z.string().optional(),
-  zipCode: z.string().optional(),
-  type: z.enum(["RESIDENTIAL", "COMMERCIAL", "INDUSTRIAL"]).optional(),
-  notes: z.string().optional(),
-  isActive: z.boolean().optional(),
-});
-
-const customerFilterSchema = z.object({
-  type: z.enum(["RESIDENTIAL", "COMMERCIAL", "INDUSTRIAL"]).optional(),
-  search: z.string().optional(),
-  limit: z.number().min(1).max(100).default(25),
-  cursor: z.string().optional(),
-});
+type CustomerUpdateInput = Partial<CustomerCreateInput> & {
+  id: string;
+};
 
 export const customerRouter = createTRPCRouter({
-  // Get all customers with filtering and pagination
-  getAll: protectedProcedure
-    .input(customerFilterSchema)
-    .query(async ({ ctx, input }) => {
-      const { limit, cursor, type, search } = input;
-      const userId = ctx.session.user.id;
-      const userRole = (ctx.session.user as any).role || UserRole.ADMIN;
-
-      try {
-        // Check if database models are available
-        if (!ctx.db || !(ctx.db as any).customer) {
-          throw new Error('Database models not available');
-        }
-
-        // Build where clause based on role and filters
-        const where: any = {};
-
-        // Role-based filtering
-        if (userRole === UserRole.CLIENT) {
-          // Clients can only see customers they created
-          where.createdById = userId;
-        } else if (userRole === UserRole.TECHNICIAN) {
-          // Technicians can see customers for work orders assigned to them
-          where.workOrders = {
-            some: {
-              assignedToId: userId
-            }
-          };
-        }
-        // Admins can see all customers
-
-        // Apply additional filters
-        if (type) {
-          where.type = type;
-        }
-        if (search) {
-          where.OR = [
-            { name: { contains: search, mode: 'insensitive' } },
-            { email: { contains: search, mode: 'insensitive' } },
-            { phone: { contains: search, mode: 'insensitive' } },
-            { address: { contains: search, mode: 'insensitive' } },
-            { city: { contains: search, mode: 'insensitive' } },
-          ];
-        }
-
-        // Handle cursor-based pagination
-        const cursorOptions = cursor ? { cursor: { id: cursor }, skip: 1 } : {};
-
-        const customers = await (ctx.db as any).customer.findMany({
-          where,
-          include: {
-            createdBy: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-            _count: {
-              select: {
-                workOrders: true,
-                invoices: true,
-              },
-            },
-          },
-          orderBy: { createdAt: 'desc' },
-          take: limit + 1, // Take one extra to check if there are more
-          ...cursorOptions,
-        });
-
-        let nextCursor: string | undefined = undefined;
-        if (customers.length > limit) {
-          const nextItem = customers.pop();
-          nextCursor = nextItem!.id;
-        }
-
-        return {
-          customers,
-          nextCursor,
-        };
-      } catch (error) {
-        console.error('Error fetching customers:', error);
-        // Return empty result if database fails
-        return {
-          customers: [],
-          nextCursor: undefined,
-        };
-      }
-    }),
-
-  // Get customer statistics
-  getStats: protectedProcedure
-    .query(async ({ ctx }) => {
-      const userId = ctx.session.user.id;
-      const userRole = (ctx.session.user as any).role || UserRole.ADMIN;
-
-      try {
-        // Check if database models are available
-        if (!ctx.db || !(ctx.db as any).customer) {
-          throw new Error('Database models not available');
-        }
-
-        // Build where clause based on role
-        const where: any = {};
-        
-        if (userRole === UserRole.CLIENT) {
-          where.createdById = userId;
-        } else if (userRole === UserRole.TECHNICIAN) {
-          where.workOrders = {
-            some: {
-              assignedToId: userId
-            }
-          };
-        }
-
-        const [total, residential, commercial, industrial] = await Promise.all([
-          (ctx.db as any).customer.count({ where }),
-          (ctx.db as any).customer.count({ where: { ...where, type: 'RESIDENTIAL' } }),
-          (ctx.db as any).customer.count({ where: { ...where, type: 'COMMERCIAL' } }),
-          (ctx.db as any).customer.count({ where: { ...where, type: 'INDUSTRIAL' } }),
-        ]);
-
-        return {
-          total,
-          residential,
-          commercial,
-          industrial,
-        };
-      } catch (error) {
-        console.error('Error fetching customer stats:', error);
-        // Return default stats if database fails
-        return {
-          total: 0,
-          residential: 0,
-          commercial: 0,
-          industrial: 0,
-        };
-      }
-    }),
-
-  // Get a single customer by ID
-  getById: protectedProcedure
-    .input(z.object({ id: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const userId = ctx.session.user.id;
-      const userRole = (ctx.session.user as any).role || UserRole.ADMIN;
-
-      try {
-        // Check if database models are available
-        if (!ctx.db || !(ctx.db as any).customer) {
-          throw new Error('Database models not available');
-        }
-
-        const where: any = { id: input.id };
-
-        // Role-based access control
-        if (userRole === UserRole.CLIENT) {
-          where.createdById = userId;
-        } else if (userRole === UserRole.TECHNICIAN) {
-          where.workOrders = {
-            some: {
-              assignedToId: userId
-            }
-          };
-        }
-
-        const customer = await (ctx.db as any).customer.findFirst({
-          where,
-          include: {
-            createdBy: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-            workOrders: {
-              select: {
-                id: true,
-                title: true,
-                status: true,
-                priority: true,
-                amount: true,
-                scheduledDate: true,
-                completedDate: true,
-              },
-              orderBy: { createdAt: 'desc' },
-              take: 10, // Get latest 10 work orders
-            },
-            invoices: {
-              select: {
-                id: true,
-                number: true,
-                status: true,
-                amount: true,
-                total: true,
-                dueDate: true,
-                paidDate: true,
-              },
-              orderBy: { createdAt: 'desc' },
-              take: 10, // Get latest 10 invoices
-            },
-          },
-        });
-
-        if (!customer) {
-          throw new TRPCError({
-            code: 'NOT_FOUND',
-            message: 'Customer not found',
-          });
-        }
-
-        return customer;
-      } catch (error) {
-        if (error instanceof TRPCError) {
-          throw error;
-        }
-        console.error('Error fetching customer:', error);
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to fetch customer',
-        });
-      }
-    }),
-
-  // Create a new customer
   create: protectedProcedure
-    .input(customerCreateSchema)
+    .input(
+      z.object({
+        name: z.string().min(2, 'Name must be at least 2 characters'),
+        email: z.string().email('Invalid email address'),
+        phone: z.string().optional(),
+        address: z.string().optional(),
+        companyName: z.string().optional(),
+      })
+    )
     .mutation(async ({ ctx, input }) => {
-      const userId = ctx.session.user.id;
-      const userRole = (ctx.session.user as any).role || UserRole.ADMIN;
-
-      // Only admins and technicians can create customers
-      if (userRole === UserRole.CLIENT) {
+      // Validate user role
+      const userRole = ctx.session?.user?.role ?? 'EMPLOYEE';
+      if (!['OWNER', 'MANAGER', 'ADMIN'].includes(userRole)) {
         throw new TRPCError({
           code: 'FORBIDDEN',
-          message: 'Clients cannot create customers',
+          message: 'You do not have permission to create customers',
         });
       }
 
       try {
-        // Check if database models are available
-        if (!ctx.db || !(ctx.db as any).customer) {
-          throw new Error('Database models not available');
-        }
-
-        // Check if customer with same email already exists
-        if (input.email) {
-          const existingCustomer = await (ctx.db as any).customer.findFirst({
-            where: { email: input.email },
-          });
-
-          if (existingCustomer) {
-            throw new TRPCError({
-              code: 'CONFLICT',
-              message: 'Customer with this email already exists',
-            });
-          }
-        }
-
-        const customer = await (ctx.db as any).customer.create({
+        const customer = await ctx.db.customer.create({
           data: {
             ...input,
-            createdById: userId,
-          },
-          include: {
-            createdBy: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
+            companyId: ctx.session.user.companyId!, // Non-null assertion
+            createdById: ctx.session.user.id, // Non-null assertion
           },
         });
 
         return customer;
       } catch (error) {
-        if (error instanceof TRPCError) {
-          throw error;
-        }
-        console.error('Error creating customer:', error);
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to create customer',
+          cause: error,
         });
       }
     }),
 
-  // Update an existing customer
-  update: protectedProcedure
-    .input(customerUpdateSchema)
-    .mutation(async ({ ctx, input }) => {
-      const userId = ctx.session.user.id;
-      const userRole = (ctx.session.user as any).role || UserRole.ADMIN;
+  getStats: protectedProcedure
+    .input(
+      z.object({
+        from: z.date().optional(),
+        to: z.date().optional(),
+      }).optional()
+    )
+    .query(async ({ ctx, input }) => {
+      const companyId = ctx.session.user.companyId;
+
+      if (!companyId) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'No company associated with user',
+        });
+      }
 
       try {
-        // Check if database models are available
-        if (!ctx.db || !(ctx.db as any).customer) {
-          throw new Error('Database models not available');
+        const where: any = { companyId };
+
+        // Optional date filtering
+        if (input?.from && input?.to) {
+          where.createdAt = {
+            gte: input.from,
+            lte: input.to,
+          };
         }
 
-        // Check if customer exists and user has access
-        const existingCustomer = await (ctx.db as any).customer.findFirst({
-          where: {
-            id: input.id,
-            ...(userRole === UserRole.CLIENT ? { createdById: userId } : {}),
-          },
+        // Total customers
+        const totalCustomers = await ctx.db.customer.count({ where });
+
+        // Customers by type
+        const customerTypes = await ctx.db.customer.groupBy({
+          by: ['type'],
+          where: { companyId },
+          _count: true,
         });
 
-        if (!existingCustomer) {
-          throw new TRPCError({
-            code: 'NOT_FOUND',
-            message: 'Customer not found',
-          });
-        }
+        // Prepare type-specific counts
+        const typeStats = customerTypes.reduce((acc, type) => {
+          acc[type.type.toLowerCase()] = type._count;
+          return acc;
+        }, {} as Record<string, number>);
 
-        // Technicians can only update notes
-        const updateData: any = {};
-        if (userRole === UserRole.TECHNICIAN) {
-          if (input.notes) updateData.notes = input.notes;
-        } else {
-          // Admins and clients can update all fields
-          Object.assign(updateData, input);
-          delete updateData.id; // Remove id from update data
-        }
+        // Calculate growth
+        const previousPeriodWhere = input?.from && input?.to ? {
+          companyId,
+          createdAt: {
+            gte: new Date(input.from.getTime() - (input.to.getTime() - input.from.getTime())),
+            lt: input.from,
+          },
+        } : { companyId };
 
-        // Check if email is being changed and if it already exists
-        if (updateData.email && updateData.email !== existingCustomer.email) {
-          const customerWithEmail = await (ctx.db as any).customer.findFirst({
-            where: { 
-              email: updateData.email,
-              id: { not: input.id }
+        const previousPeriodCustomers = await ctx.db.customer.count({ where: previousPeriodWhere });
+
+        // Calculate growth percentage
+        const growthValue = previousPeriodCustomers > 0 
+          ? ((totalCustomers - previousPeriodCustomers) / previousPeriodCustomers) * 100 
+          : 0;
+
+        return {
+          totalCustomers,
+          residential: typeStats.residential || 0,
+          commercial: typeStats.commercial || 0,
+          industrial: typeStats.industrial || 0,
+          growth: {
+            total: {
+              isPositive: growthValue >= 0,
+              value: Math.abs(Number(growthValue.toFixed(2))),
+              period: input?.from && input?.to ? 'month' : 'all time',
             },
-          });
+            residential: {
+              isPositive: (typeStats.residential || 0) > 0,
+              newCustomers: typeStats.residential || 0,
+              period: 'quarter',
+            },
+            commercial: {
+              isPositive: (typeStats.commercial || 0) > 0,
+              newCustomers: typeStats.commercial || 0,
+              period: 'month',
+            },
+            industrial: {
+              isPositive: (typeStats.industrial || 0) > 0,
+              newCustomers: typeStats.industrial || 0,
+              period: 'year',
+            },
+          },
+        };
+      } catch (error) {
+        console.error('Failed to fetch customer stats:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to fetch customer statistics',
+        });
+      }
+    }),
 
-          if (customerWithEmail) {
-            throw new TRPCError({
-              code: 'CONFLICT',
-              message: 'Customer with this email already exists',
-            });
-          }
+  list: protectedProcedure
+    .input(
+      z.object({
+        limit: z.number().min(1).max(100).default(50),
+        cursor: z.string().optional(),
+        search: z.string().optional(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const { limit, cursor, search } = input;
+      const companyId = ctx.session.user.companyId;
+
+      if (!companyId) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'No company associated with user',
+        });
+      }
+
+      try {
+        // Build where clause
+        const where: any = { companyId };
+
+        // Add search filter if provided
+        if (search) {
+          where.AND = [
+            { companyId },
+            {
+              OR: [
+                { name: { contains: search, mode: 'insensitive' } },
+                { email: { contains: search, mode: 'insensitive' } },
+                { phone: { contains: search, mode: 'insensitive' } },
+              ],
+            },
+          ];
+          // Remove the direct companyId from the top-level where if AND is used
+          delete where.companyId;
         }
 
-        const customer = await (ctx.db as any).customer.update({
-          where: { id: input.id },
-          data: updateData,
-          include: {
+        // Handle cursor-based pagination
+        const cursorOptions = cursor ? { cursor: { id: cursor }, skip: 1 } : undefined;
+
+        // Fetch customers
+        console.log('Customer list - companyId:', companyId);
+        console.log('Customer list - where clause:', where);
+        const customers = await ctx.db.customer.findMany({
+          ...cursorOptions,
+          where,
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            address: true,
+            type: true,
+            createdAt: true,
+            updatedAt: true,
             createdBy: {
               select: {
                 id: true,
@@ -397,84 +217,109 @@ export const customerRouter = createTRPCRouter({
                 email: true,
               },
             },
-          },
-        });
-
-        return customer;
-      } catch (error) {
-        if (error instanceof TRPCError) {
-          throw error;
-        }
-        console.error('Error updating customer:', error);
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to update customer',
-        });
-      }
-    }),
-
-  // Delete a customer
-  delete: protectedProcedure
-    .input(z.object({ id: z.string() }))
-    .mutation(async ({ ctx, input }) => {
-      const userId = ctx.session.user.id;
-      const userRole = (ctx.session.user as any).role || UserRole.ADMIN;
-
-      // Only admins can delete customers
-      if (userRole !== UserRole.ADMIN) {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'Only administrators can delete customers',
-        });
-      }
-
-      try {
-        // Check if database models are available
-        if (!ctx.db || !(ctx.db as any).customer) {
-          throw new Error('Database models not available');
-        }
-
-        const customer = await (ctx.db as any).customer.findUnique({
-          where: { id: input.id },
-          include: {
             _count: {
-              select: {
+              select: { 
                 workOrders: true,
                 invoices: true,
               },
             },
           },
+          orderBy: {
+            createdAt: 'desc',
+          },
+          take: limit + 1,
         });
+        console.log('Customers fetched from DB:', customers);
 
-        if (!customer) {
-          throw new TRPCError({
-            code: 'NOT_FOUND',
-            message: 'Customer not found',
-          });
-        }
+        // Return paginated results
+        const hasNextPage = customers.length > limit;
+        const nextCursor = hasNextPage ? customers[customers.length - 1]?.id : undefined;
 
-        // Check if customer has associated work orders or invoices
-        if (customer._count.workOrders > 0 || customer._count.invoices > 0) {
-          throw new TRPCError({
-            code: 'CONFLICT',
-            message: 'Cannot delete customer with existing work orders or invoices',
-          });
-        }
-
-        await (ctx.db as any).customer.delete({
-          where: { id: input.id },
-        });
-
-        return { success: true };
+        return {
+          items: customers.slice(0, limit).map(customer => ({
+            id: customer.id,
+            name: customer.name,
+            email: customer.email,
+            phone: customer.phone,
+            address: customer.address,
+            type: customer.type ?? 'RESIDENTIAL', // Default type
+            createdAt: customer.createdAt,
+            updatedAt: customer.updatedAt ?? new Date(), // Default to current date
+            createdBy: customer.createdBy ?? { 
+              id: '', 
+              name: 'Unknown', 
+              email: '' 
+            },
+            createdById: customer.createdBy?.id ?? '',
+            workOrders: [], // Empty array as we didn't fetch related work orders
+            invoices: [], // Empty array as we didn't fetch related invoices
+            _count: {
+              workOrders: customer._count.workOrders,
+              invoices: customer._count.invoices ?? 0,
+            },
+            notes: null, // Optional field
+            severity: null, // Optional field
+          })),
+          nextCursor,
+          hasMore: hasNextPage,
+        };
       } catch (error) {
-        if (error instanceof TRPCError) {
-          throw error;
-        }
-        console.error('Error deleting customer:', error);
+        console.error('Failed to fetch customers:', error);
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to delete customer',
+          message: 'Failed to fetch customers',
         });
       }
+    }),
+
+  getById: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const companyId = ctx.session.user.companyId;
+
+      if (!companyId) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'No company associated with user',
+        });
+      }
+
+      const customer = await ctx.db.customer.findUnique({
+        where: { 
+          id: input.id,
+          companyId: companyId 
+        },
+        include: {
+          workOrders: {
+            select: {
+              id: true,
+              status: true,
+              scheduledDate: true,
+              type: true,
+            },
+            orderBy: { scheduledDate: 'desc' },
+            take: 5, // Limit to last 5 work orders
+          },
+          invoices: {
+            select: {
+              id: true,
+              amount: true,
+              status: true,
+              createdAt: true,
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 5, // Limit to last 5 invoices
+          },
+        },
+      });
+
+      if (!customer) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Customer not found',
+        });
+      }
+
+      return customer;
     }),
 }); 

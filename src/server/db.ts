@@ -1,20 +1,12 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from '@prisma/client'
 
-import { env } from "~/env";
+// Ensure a single Prisma client instance is used
+const globalForPrisma = global as unknown as { prisma: PrismaClient }
 
-const createPrismaClient = () =>
+export const db =
+  globalForPrisma.prisma ||
   new PrismaClient({
-    log:
-      env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
-  });
+    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+  })
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: ReturnType<typeof createPrismaClient> | undefined;
-};
-
-export const db = globalForPrisma.prisma ?? createPrismaClient();
-
-if (env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = db;
-  console.log("Database connection established.");
-}
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db

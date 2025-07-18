@@ -16,6 +16,10 @@ datasource db {
 
 // Enums
 enum UserRole {
+    OWNER     // Company owner with full access
+    MANAGER   // Company manager with admin access
+    EMPLOYEE  // Regular employee/field worker
+    // Legacy roles for backward compatibility
     ADMIN
     TECHNICIAN
     CLIENT
@@ -36,6 +40,15 @@ enum WorkOrderPriority {
     URGENT
 }
 
+enum WorkOrderType {
+    INSTALLATION
+    MAINTENANCE
+    REPAIR
+    TROUBLESHOOTING
+    INSPECTION
+    OTHER
+}
+
 enum InvoiceStatus {
     DRAFT
     PENDING
@@ -50,32 +63,123 @@ enum CustomerType {
     INDUSTRIAL
 }
 
+enum PlanType {
+    SOLO      // $29/month - 1 user
+    TEAM      // $59/month - up to 10 users
+    BUSINESS  // $99/month - up to 50 users
+    ENTERPRISE // Custom pricing
+}
+
+enum SubscriptionStatus {
+    TRIAL         // 14-day trial period
+    ACTIVE        // Paid and active
+    PAST_DUE      // Payment failed
+    CANCELLED     // Cancelled subscription
+    EXPIRED       // Trial or subscription expired
+}
+
+enum InvitationStatus {
+    PENDING
+    ACCEPTED
+    DECLINED
+    EXPIRED
+}
+
+// Company and Plan Models
+model Company {
+    id                String             @id @default(cuid())
+    name              String
+    email             String?            // Company contact email
+    phone             String?
+    address           String?
+    city              String?
+    state             String?
+    zipCode           String?
+    website           String?
+    industry          String?
+    timezone          String             @default("America/New_York")
+    isActive          Boolean            @default(true)
+    createdAt         DateTime           @default(now())
+    updatedAt         DateTime           @updatedAt
+    
+    // Trial and subscription info
+    planType          PlanType           @default(SOLO)
+    subscriptionStatus SubscriptionStatus @default(TRIAL)
+    trialStartDate    DateTime           @default(now())
+    trialEndDate      DateTime           // Set to 14 days from start
+    subscriptionId    String?            // External subscription ID (Stripe, etc.)
+    
+    // Relations
+    users             User[]
+    customers         Customer[]
+    workOrders        WorkOrder[]
+    invoices          Invoice[]
+    teams             Team[]
+    invitations       CompanyInvitation[]
+    
+    @@index([subscriptionStatus])
+    @@index([trialEndDate])
+}
+
+model CompanyInvitation {
+    id          String           @id @default(cuid())
+    email       String
+    role        UserRole         @default(EMPLOYEE)
+    status      InvitationStatus @default(PENDING)
+    token       String           @unique @default(cuid())
+    expiresAt   DateTime
+    invitedAt   DateTime         @default(now())
+    acceptedAt  DateTime?
+    
+    // Relations
+    company     Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+    companyId   String
+    invitedBy   User             @relation(fields: [invitedById], references: [id])
+    invitedById String
+    acceptedBy  User?            @relation("AcceptedInvitations", fields: [acceptedById], references: [id])
+    acceptedById String?
+    
+    @@unique([companyId, email])
+    @@index([token])
+    @@index([status])
+    @@index([expiresAt])
+}
+
 // Core Models
 model User {
-    id            String    @id @default(cuid())
-    name          String?
-    email         String?   @unique
-    emailVerified DateTime?
-    image         String?
-    password      String?
-    role          UserRole  @default(ADMIN)
-    phone         String?
-    isActive      Boolean   @default(true)
-    createdAt     DateTime  @default(now())
-    updatedAt     DateTime  @updatedAt
-
+    id                    String                @id @unique // The id from Supabase Auth.users
+    name                  String?
+    email                 String?               @unique
+    emailVerified         DateTime?
+    image                 String?
+    role                  UserRole              @default(EMPLOYEE)
+    phone                 String?
+    jobTitle              String?
+    isActive              Boolean               @default(true)
+    lastLoginAt           DateTime?
+    resetToken            String?
+    resetTokenExpiry      DateTime?
+    createdAt             DateTime              @default(now())
+    updatedAt             DateTime              @updatedAt
+    
+    // Company relationship
+    company               Company?              @relation(fields: [companyId], references: [id])
+    companyId             String?
+    joinedCompanyAt       DateTime?
+    
     // Relations
-    accounts            Account[]
-    sessions            Session[]
-    posts               Post[]
-    createdWorkOrders   WorkOrder[]    @relation("CreatedByUser")
-    assignedWorkOrders  WorkOrder[]    @relation("AssignedToUser")
-    customers           Customer[]     @relation("CustomerCreatedBy")
-    invoices            Invoice[]      @relation("InvoiceCreatedBy")
-    teamMemberships     TeamMember[]
+    posts                 Post[]
+    createdWorkOrders     WorkOrder[]           @relation("CreatedByUser")
+    assignedWorkOrders    WorkOrder[]           @relation("AssignedToUser")
+    customers             Customer[]            @relation("CustomerCreatedBy")
+    invoices              Invoice[]             @relation("InvoiceCreatedBy")
+    teamMemberships       TeamMember[]
+    sentInvitations       CompanyInvitation[]
+    acceptedInvitations   CompanyInvitation[]   @relation("AcceptedInvitations")
     
     @@index([email])
     @@index([role])
+    @@index([companyId])
 }
 
 model Customer {
@@ -94,6 +198,8 @@ model Customer {
     updatedAt   DateTime     @updatedAt
     
     // Relations
+    company       Company      @relation(fields: [companyId], references: [id])
+    companyId     String
     createdBy     User         @relation("CustomerCreatedBy", fields: [createdById], references: [id])
     createdById   String
     workOrders    WorkOrder[]
@@ -102,6 +208,7 @@ model Customer {
     @@index([name])
     @@index([email])
     @@index([type])
+    @@index([companyId])
 }
 
 model WorkOrder {
@@ -117,10 +224,13 @@ model WorkOrder {
     completedDate   DateTime?
     location        String?
     notes           String?
+    type            WorkOrderType @default(INSTALLATION) // Added missing type field
     createdAt       DateTime          @default(now())
     updatedAt       DateTime          @updatedAt
     
     // Relations
+    company       Company     @relation(fields: [companyId], references: [id])
+    companyId     String
     customer      Customer    @relation(fields: [customerId], references: [id])
     customerId    String
     createdBy     User        @relation("CreatedByUser", fields: [createdById], references: [id])
@@ -133,48 +243,47 @@ model WorkOrder {
     
     @@index([status])
     @@index([priority])
+    @@index([companyId])
     @@index([customerId])
-    @@index([assignedToId])
-    @@index([scheduledDate])
 }
 
 model Team {
-    id          String   @id @default(cuid())
+    id          String       @id @default(cuid())
     name        String
     description String?
-    isActive    Boolean  @default(true)
-    createdAt   DateTime @default(now())
-    updatedAt   DateTime @updatedAt
+    createdAt   DateTime     @default(now())
+    updatedAt   DateTime     @updatedAt
     
     // Relations
-    members     TeamMember[]
-    workOrders  WorkOrder[]
+    company       Company      @relation(fields: [companyId], references: [id])
+    companyId     String
+    members       TeamMember[]
+    workOrders    WorkOrder[]
     
-    @@index([name])
+    @@index([companyId])
 }
 
 model TeamMember {
-    id       String @id @default(cuid())
-    role     String @default("MEMBER") // LEADER, MEMBER
-    joinedAt DateTime @default(now())
+    id        String   @id @default(cuid())
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
     
     // Relations
-    user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-    userId String
-    team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
-    teamId String
-    
-    @@unique([userId, teamId])
+    team      Team     @relation(fields: [teamId], references: [id])
+    teamId    String
+    user      User     @relation(fields: [userId], references: [id])
+    userId    String   @unique // One-to-one relationship with User
 }
 
 model Invoice {
     id          String        @id @default(cuid())
-    number      String        @unique
-    status      InvoiceStatus @default(DRAFT)
+    number      String        @unique @map("invoice_number") // Explicitly map to 'invoice_number'
     amount      Float
     tax         Float         @default(0)
     discount    Float         @default(0)
     total       Float
+    status      InvoiceStatus @default(DRAFT)
+    issueDate   DateTime      @default(now())
     dueDate     DateTime
     paidDate    DateTime?
     notes       String?
@@ -182,60 +291,35 @@ model Invoice {
     updatedAt   DateTime      @updatedAt
     
     // Relations
-    customer      Customer    @relation(fields: [customerId], references: [id])
-    customerId    String
-    workOrder     WorkOrder?  @relation(fields: [workOrderId], references: [id])
-    workOrderId   String?
-    createdBy     User        @relation("InvoiceCreatedBy", fields: [createdById], references: [id])
-    createdById   String
+    company     Company       @relation(fields: [companyId], references: [id])
+    companyId   String
+    customer    Customer      @relation(fields: [customerId], references: [id])
+    customerId  String
+    workOrder   WorkOrder     @relation(fields: [workOrderId], references: [id])
+    workOrderId String
+    createdBy   User          @relation("InvoiceCreatedBy", fields: [createdById], references: [id])
+    createdById String
     
     @@index([status])
+    @@index([companyId])
     @@index([customerId])
-    @@index([number])
-    @@index([dueDate])
+    @@index([workOrderId])
 }
 
-// Legacy models (keep for compatibility)
 model Post {
-    id        Int      @id @default(autoincrement())
-    name      String
+    id        String   @id @default(cuid())
+    title     String
+    content   String?
+    published Boolean  @default(false)
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
-
-    createdBy   User   @relation(fields: [createdById], references: [id])
-    createdById String
-
-    @@index([name])
+    
+    // Relations
+    author    User?    @relation(fields: [authorId], references: [id])
+    authorId  String?
 }
 
-// NextAuth models
-model Account {
-    id                       String  @id @default(cuid())
-    userId                   String
-    type                     String
-    provider                 String
-    providerAccountId        String
-    refresh_token            String? // @db.Text
-    access_token             String? // @db.Text
-    expires_at               Int?
-    token_type               String?
-    scope                    String?
-    id_token                 String? // @db.Text
-    session_state            String?
-    user                     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-    refresh_token_expires_in Int?
-
-    @@unique([provider, providerAccountId])
-}
-
-model Session {
-    id           String   @id @default(cuid())
-    sessionToken String   @unique
-    userId       String
-    expires      DateTime
-    user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
+// NextAuth models - Removed as user management is now handled directly by Supabase Auth.
 model VerificationToken {
     identifier String
     token      String   @unique

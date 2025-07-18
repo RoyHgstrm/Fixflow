@@ -1,0 +1,101 @@
+# Page snapshot
+
+```yaml
+- navigation:
+  - link "F FixFlow":
+    - /url: /
+  - link "Sign In":
+    - /url: /login
+    - button "Sign In"
+  - link "Get Started":
+    - /url: /signup
+    - button "Get Started"
+- main:
+  - link "FixFlow":
+    - /url: /
+  - paragraph: Welcome back to your business management platform
+  - text: Sign In Enter your credentials to access your account Email Address
+  - textbox "Email Address"
+  - text: Password
+  - textbox "Password"
+  - button
+  - button "Sign In"
+  - link "Forgot your password?":
+    - /url: /forgot-password
+  - text: Don't have an account?
+  - link "Create Account":
+    - /url: /signup
+  - link "← Back to Home":
+    - /url: /
+  - text: Secure Login Data Protected 24/7 Support
+- contentinfo:
+  - text: 2,500+ Active Businesses 50,000+ Jobs Completed 98% Customer Satisfaction F FixFlow
+  - paragraph: The all-in-one platform for cleaning, maintenance, and repair businesses. Streamline operations, manage teams, and delight customers with our professional SaaS solution.
+  - text: Helsinki, Finland +358 40 123 4567 support@fixflow.fi
+  - link:
+    - /url: https://twitter.com/fixflow
+  - link:
+    - /url: https://linkedin.com/company/fixflow
+  - link:
+    - /url: https://github.com/fixflow
+  - heading "Product" [level=3]
+  - list:
+    - listitem:
+      - link "Features":
+        - /url: /features
+    - listitem:
+      - link "Pricing":
+        - /url: /pricing
+    - listitem:
+      - link "Security":
+        - /url: /security
+    - listitem:
+      - link "Integrations":
+        - /url: /integrations
+  - heading "Company" [level=3]
+  - list:
+    - listitem:
+      - link "About Us":
+        - /url: /about
+    - listitem:
+      - link "Careers":
+        - /url: /careers
+    - listitem:
+      - link "Blog":
+        - /url: /blog
+    - listitem:
+      - link "Contact":
+        - /url: /contact
+  - heading "Support" [level=3]
+  - list:
+    - listitem:
+      - link "Help Center":
+        - /url: /help
+    - listitem:
+      - link "Documentation":
+        - /url: /docs
+    - listitem:
+      - link "API Reference":
+        - /url: /api
+    - listitem:
+      - link "Status":
+        - /url: /status
+  - heading "Legal" [level=3]
+  - list:
+    - listitem:
+      - link "Privacy Policy":
+        - /url: /privacy
+    - listitem:
+      - link "Terms of Service":
+        - /url: /terms
+  - heading "Built for Every Role" [level=3]
+  - paragraph: Tailored experiences for administrators, technicians, and clients
+  - heading "Administrators" [level=4]
+  - paragraph: Full system control, user management, and comprehensive analytics
+  - heading "Technicians" [level=4]
+  - paragraph: Job assignments, mobile access, and real-time status updates
+  - heading "Clients" [level=4]
+  - paragraph: Service requests, progress tracking, and communication tools
+  - text: © 2025 FixFlow. All rights reserved. Built with ❤️ for service businesses. All systems operational v2.1.0
+- alert
+```

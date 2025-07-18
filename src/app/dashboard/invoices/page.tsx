@@ -27,8 +27,11 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { api } from '~/trpc/react';
-import { InvoiceStatus, type InvoiceWithRelations } from '~/lib/types';
+import { PrimaryActionButton, SecondaryActionButton, ActionButtonGroup } from '@/components/ui/action-button';
+import { api } from "@/trpc/react";
+import type { InvoiceStatus} from '@/lib/types';
+import { type InvoiceWithRelations } from '@/lib/types';
+import { usePageTitle } from "@/lib/hooks/use-page-title";
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -57,23 +60,23 @@ const invoiceStatuses = ['All', 'DRAFT', 'PENDING', 'PAID', 'OVERDUE', 'CANCELLE
 
 const getStatusColor = (status: string) => {
   switch (status) {
-    case 'PAID': return 'text-green-500 bg-green-500/10 border-green-500/20';
-    case 'PENDING': return 'text-yellow-500 bg-yellow-500/10 border-yellow-500/20';
-    case 'OVERDUE': return 'text-red-500 bg-red-500/10 border-red-500/20';
-    case 'DRAFT': return 'text-gray-500 bg-gray-500/10 border-gray-500/20';
-    case 'CANCELLED': return 'text-red-600 bg-red-600/10 border-red-600/20';
-    default: return 'text-muted-foreground bg-muted/10 border-border/20';
+  case 'PAID': return 'text-green-500 bg-green-500/10 border-green-500/20';
+  case 'PENDING': return 'text-yellow-500 bg-yellow-500/10 border-yellow-500/20';
+  case 'OVERDUE': return 'text-red-500 bg-red-500/10 border-red-500/20';
+  case 'DRAFT': return 'text-gray-500 bg-gray-500/10 border-gray-500/20';
+  case 'CANCELLED': return 'text-red-600 bg-red-600/10 border-red-600/20';
+  default: return 'text-muted-foreground bg-muted/10 border-border/20';
   }
 };
 
 const getStatusIcon = (status: string) => {
   switch (status) {
-    case 'PAID': return CheckCircle;
-    case 'PENDING': return Clock;
-    case 'OVERDUE': return AlertCircle;
-    case 'DRAFT': return FileText;
-    case 'CANCELLED': return XCircle;
-    default: return Receipt;
+  case 'PAID': return CheckCircle;
+  case 'PENDING': return Clock;
+  case 'OVERDUE': return AlertCircle;
+  case 'DRAFT': return FileText;
+  case 'CANCELLED': return XCircle;
+  default: return Receipt;
   }
 };
 
@@ -84,6 +87,9 @@ export default function InvoicesPage() {
 
   // Get user role for role-based functionality
   const userRole = (session?.user?.role as "ADMIN" | "CLIENT" | "TECHNICIAN") ?? 'ADMIN';
+  
+  // Set dynamic page title
+  usePageTitle(userRole);
 
   // Fetch invoices from database
   const { data: invoicesData, isLoading: invoicesLoading, error: invoicesError } = api.invoice.getAll.useQuery({
@@ -101,30 +107,30 @@ export default function InvoicesPage() {
   // Role-based header content
   const getHeaderContent = () => {
     switch (userRole) {
-      case 'ADMIN':
-        return {
-          title: 'Invoice Management',
-          description: 'Manage billing and track payments across your organization',
-          icon: Shield,
-          color: 'text-primary',
-          bgColor: 'bg-primary/10'
-        };
-      case 'CLIENT':
-        return {
-          title: 'My Invoices',
-          description: 'View and track your service invoices and payments',
-          icon: User,
-          color: 'text-blue-500',
-          bgColor: 'bg-blue-500/10'
-        };
-      default:
-        return {
-          title: 'Invoices',
-          description: 'Invoice and payment management',
-          icon: Receipt,
-          color: 'text-primary',
-          bgColor: 'bg-primary/10'
-        };
+    case 'ADMIN':
+      return {
+        title: 'Invoice Management',
+        description: 'Manage billing and track payments across your organization',
+        icon: Shield,
+        color: 'text-primary',
+        bgColor: 'bg-primary/10'
+      };
+    case 'CLIENT':
+      return {
+        title: 'My Invoices',
+        description: 'View and track your service invoices and payments',
+        icon: User,
+        color: 'text-blue-500',
+        bgColor: 'bg-blue-500/10'
+      };
+    default:
+      return {
+        title: 'Invoices',
+        description: 'Invoice and payment management',
+        icon: Receipt,
+        color: 'text-primary',
+        bgColor: 'bg-primary/10'
+      };
     }
   };
 
@@ -175,7 +181,7 @@ export default function InvoicesPage() {
               {invoicesError.message || 'Failed to load invoices. Please try again.'}
             </p>
             <Button 
-              onClick={() => window.location.reload()} 
+              onClick={() => { window.location.reload(); }} 
               className="gradient-primary"
             >
               Try Again
@@ -207,16 +213,20 @@ export default function InvoicesPage() {
           </div>
           
           {userRole === 'ADMIN' && (
-            <div className="flex gap-3">
-              <Button variant="outline" className="glass hover:bg-primary/5">
-                <Download className="w-4 h-4 mr-2" />
+            <ActionButtonGroup spacing="normal">
+              <SecondaryActionButton 
+                icon={Download}
+                mobileLabel="Export"
+              >
                 Export
-              </Button>
-              <Button className="gradient-primary shadow-glow hover:shadow-glow-lg transition-all duration-300 group">
-                <PlusCircle className="w-5 h-5 mr-2 group-hover:scale-110 transition-transform" />
+              </SecondaryActionButton>
+              <PrimaryActionButton 
+                icon={PlusCircle}
+                mobileLabel="Create"
+              >
                 Create Invoice
-              </Button>
-            </div>
+              </PrimaryActionButton>
+            </ActionButtonGroup>
           )}
         </div>
       </motion.div>
@@ -309,7 +319,7 @@ export default function InvoicesPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Total Value</p>
-                  <p className="text-2xl font-bold">${(stats?.totalAmount ?? 0).toLocaleString()}</p>
+                  <p className="text-2xl font-bold">€{(stats?.totalAmount ?? 0).toLocaleString("de-DE")}</p>
                   <p className="text-xs text-blue-500 flex items-center mt-1">
                     <DollarSign className="w-3 h-3 mr-1" />
                     Revenue tracking
@@ -335,7 +345,7 @@ export default function InvoicesPage() {
                 type="text"
                 placeholder="Search invoices..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => { setSearchQuery(e.target.value); }}
                 className="pl-10 pr-4 py-2 glass rounded-lg border border-border/50 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20 w-full sm:w-64"
               />
             </div>
@@ -347,7 +357,7 @@ export default function InvoicesPage() {
                   key={status}
                   variant={selectedStatus === status ? "default" : "outline"}
                   size="sm"
-                  onClick={() => setSelectedStatus(status)}
+                  onClick={() => { setSelectedStatus(status); }}
                   className={selectedStatus === status ? 
                     "gradient-primary shadow-glow" : 
                     "glass hover:bg-primary/5"
@@ -413,7 +423,7 @@ export default function InvoicesPage() {
                             </span>
                           </div>
                           <div className="text-lg font-bold text-emerald-500">
-                            ${invoice.amount.toFixed(2)}
+                            €{invoice.amount.toFixed(2)}
                           </div>
                         </div>
 

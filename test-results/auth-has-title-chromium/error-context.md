@@ -1,0 +1,200 @@
+# Page snapshot
+
+```yaml
+- navigation:
+  - link "F FixFlow":
+    - /url: /
+  - link "Sign In":
+    - /url: /login
+    - button "Sign In"
+  - link "Get Started":
+    - /url: /signup
+    - button "Get Started"
+- main:
+  - main:
+    - text: 14-Day Free Trial • No Credit Card Required
+    - heading "Professional Business Management for Service Companies" [level=1]
+    - paragraph: Streamline operations, manage teams, and grow revenue with FixFlow's comprehensive platform designed specifically for cleaning, maintenance, and repair businesses.
+    - link "Choose Your Plan & Start Trial":
+      - /url: /signup
+      - button "Choose Your Plan & Start Trial"
+    - link "View Pricing Plans":
+      - /url: "#pricing"
+      - button "View Pricing Plans"
+    - text: 14-day free trial No setup fees Cancel anytime
+    - heading "Live Dashboard" [level=3]
+    - text: Real-time 28 Active Jobs +15% this week €3,240 Today's Revenue +22% vs yesterday Commercial Cleaning - Tech Plaza Team Alpha • In Progress 2h remaining HVAC Maintenance - Medical Center Sarah M. • Completed €450
+    - heading "Everything You Need to Scale Your Business" [level=2]
+    - paragraph: Professional-grade tools designed specifically for service businesses. Streamline operations and focus on what matters most - growing your business.
+    - heading "Smart Dashboard" [level=3]
+    - paragraph: Complete overview of jobs, revenue, and team performance with real-time analytics.
+    - heading "Work Order Management" [level=3]
+    - paragraph: Create, assign, and track jobs with comprehensive documentation and status updates.
+    - heading "Smart Scheduling" [level=3]
+    - paragraph: Drag-and-drop scheduling with automated conflicts detection and team optimization.
+    - heading "Customer Management" [level=3]
+    - paragraph: Centralized customer profiles with service history, preferences, and communication logs.
+    - heading "Invoicing & Payments" [level=3]
+    - paragraph: Professional invoicing with automated payment tracking and revenue analytics.
+    - heading "Mobile-First Design" [level=3]
+    - paragraph: Native mobile experience for field teams with offline capabilities and real-time sync.
+    - heading "Choose Your Perfect Plan" [level=2]
+    - paragraph: Start with a 14-day free trial. No credit card required. Upgrade, downgrade, or cancel anytime.
+    - text: Solo
+    - paragraph: Perfect for solo operators and one-person businesses
+    - text: 49€/month
+    - paragraph: Up to 1 user
+    - list:
+      - listitem: Unlimited work orders
+      - listitem: Customer management
+      - listitem: Basic scheduling
+      - listitem: Invoice generation
+      - listitem: Mobile app access
+      - listitem: Email support
+    - link "Start 14-Day Trial":
+      - /url: /signup?plan=solo
+      - button "Start 14-Day Trial"
+    - text: Most Popular Team
+    - paragraph: Ideal for small teams and growing businesses
+    - text: 129€/month
+    - paragraph: Up to 10 users
+    - list:
+      - listitem: Everything in Solo
+      - listitem: Up to 10 team members
+      - listitem: Team scheduling & assignments
+      - listitem: Advanced reporting
+      - listitem: Priority support
+      - listitem: Team performance tracking
+    - link "Start 14-Day Trial":
+      - /url: /signup?plan=team
+      - button "Start 14-Day Trial"
+    - text: Business
+    - paragraph: For established businesses with larger teams
+    - text: 299€/month
+    - paragraph: Up to 50 users
+    - list:
+      - listitem: Everything in Team
+      - listitem: Up to 50 team members
+      - listitem: Advanced analytics
+      - listitem: Custom workflow automation
+      - listitem: API access
+      - listitem: Dedicated support
+    - link "Start 14-Day Trial":
+      - /url: /signup?plan=business
+      - button "Start 14-Day Trial"
+    - text: Enterprise
+    - paragraph: Custom solutions for large organizations
+    - text: Custom
+    - list:
+      - listitem: Everything in Business
+      - listitem: Unlimited team members
+      - listitem: Custom integrations
+      - listitem: On-premise deployment
+      - listitem: 24/7 phone support
+      - listitem: Dedicated account manager
+    - link "Contact Sales":
+      - /url: /signup?plan=enterprise
+      - button "Contact Sales"
+    - paragraph: Need help choosing? Our team is here to help you find the perfect plan.
+    - button "Schedule a Demo"
+    - heading "Trusted by Service Professionals" [level=2]
+    - paragraph: Real results from businesses that chose FixFlow to transform their operations.
+    - text: 60% less admin time
+    - paragraph: FixFlow transformed our 15-person cleaning business. We've cut administrative time by 60% and increased customer satisfaction significantly.
+    - text: SJ Sarah Johnson Owner at Clean Pro Services 100% field connectivity
+    - paragraph: The mobile app keeps our field teams connected. Real-time updates and photo documentation have eliminated miscommunication completely.
+    - text: MR Mike Rodriguez Operations Manager at Rodriguez Maintenance 25% revenue increase
+    - paragraph: Revenue tracking and automated invoicing features helped us identify profitable services and eliminate unprofitable ones.
+    - text: LC Lisa Chen Founder at Elite Cleaning Co.
+    - heading "Frequently Asked Questions" [level=2]
+    - paragraph: Everything you need to know about FixFlow and how it works for your business.
+    - heading "How quickly can we get started?" [level=3]
+    - paragraph: Setup takes less than 30 minutes. Choose your plan, create your company, and start creating work orders immediately. No technical expertise required.
+    - heading "Does it work offline?" [level=3]
+    - paragraph: Yes, our mobile app works offline for field teams. Data syncs automatically when connection is restored, ensuring no work is lost.
+    - heading "Can we import our existing data?" [level=3]
+    - paragraph: Absolutely. We provide data import tools for customer lists, service history, and team information. Our support team assists with larger migrations.
+    - heading "What integrations are available?" [level=3]
+    - paragraph: We integrate with popular accounting software (QuickBooks, Xero), payment processors (Stripe, Square), and calendar applications (Google Calendar, Outlook).
+    - heading "Is our data secure?" [level=3]
+    - paragraph: Yes. We use enterprise-grade encryption, regular security audits, and comply with SOC 2 standards. Your data is backed up daily with 99.9% uptime guarantee.
+    - heading "What happens if we need to cancel?" [level=3]
+    - paragraph: No long-term contracts required. Cancel anytime with 30 days notice. We provide data export tools to ensure you keep all your information.
+    - heading "Ready to Transform Your Business?" [level=2]
+    - paragraph: Join thousands of service businesses already using FixFlow to streamline operations, manage teams, and accelerate growth.
+    - link "Choose Your Plan & Start Trial":
+      - /url: /signup
+      - button "Choose Your Plan & Start Trial"
+    - button "Schedule Demo"
+    - text: 14-day free trial No setup fees Cancel anytime
+- contentinfo:
+  - text: 2,500+ Active Businesses 50,000+ Jobs Completed 98% Customer Satisfaction F FixFlow
+  - paragraph: The all-in-one platform for cleaning, maintenance, and repair businesses. Streamline operations, manage teams, and delight customers with our professional SaaS solution.
+  - text: Helsinki, Finland +358 40 123 4567 support@fixflow.fi
+  - link:
+    - /url: https://twitter.com/fixflow
+  - link:
+    - /url: https://linkedin.com/company/fixflow
+  - link:
+    - /url: https://github.com/fixflow
+  - heading "Product" [level=3]
+  - list:
+    - listitem:
+      - link "Features":
+        - /url: /features
+    - listitem:
+      - link "Pricing":
+        - /url: /pricing
+    - listitem:
+      - link "Security":
+        - /url: /security
+    - listitem:
+      - link "Integrations":
+        - /url: /integrations
+  - heading "Company" [level=3]
+  - list:
+    - listitem:
+      - link "About Us":
+        - /url: /about
+    - listitem:
+      - link "Careers":
+        - /url: /careers
+    - listitem:
+      - link "Blog":
+        - /url: /blog
+    - listitem:
+      - link "Contact":
+        - /url: /contact
+  - heading "Support" [level=3]
+  - list:
+    - listitem:
+      - link "Help Center":
+        - /url: /help
+    - listitem:
+      - link "Documentation":
+        - /url: /docs
+    - listitem:
+      - link "API Reference":
+        - /url: /api
+    - listitem:
+      - link "Status":
+        - /url: /status
+  - heading "Legal" [level=3]
+  - list:
+    - listitem:
+      - link "Privacy Policy":
+        - /url: /privacy
+    - listitem:
+      - link "Terms of Service":
+        - /url: /terms
+  - heading "Built for Every Role" [level=3]
+  - paragraph: Tailored experiences for administrators, technicians, and clients
+  - heading "Administrators" [level=4]
+  - paragraph: Full system control, user management, and comprehensive analytics
+  - heading "Technicians" [level=4]
+  - paragraph: Job assignments, mobile access, and real-time status updates
+  - heading "Clients" [level=4]
+  - paragraph: Service requests, progress tracking, and communication tools
+  - text: © 2025 FixFlow. All rights reserved. Built with ❤️ for service businesses. All systems operational v2.1.0
+- alert
+```

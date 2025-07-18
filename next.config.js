@@ -2,16 +2,23 @@
  * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially useful
  * for Docker builds.
  */
-import "./src/env.js";
+import path from 'path';
 
-/** @type {import("next").NextConfig} */
-const config = {
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   webpack: (config, { isServer }) => {
+    config.resolve.alias['@'] = path.resolve('./src');
+    
+    // Add configuration to resolve duplicate module imports
+    config.resolve.fallback = { fs: false, net: false, tls: false };
+    
     if (!isServer) {
-      config.externals.push(/^(coverage|node_modules)$/);
+      config.resolve.alias['next/navigation'] = path.resolve('./node_modules/next/navigation.js');
     }
+    
     return config;
   },
+  // Add other Next.js configurations here
 };
 
-export default config;
+export default nextConfig;
