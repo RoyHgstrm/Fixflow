@@ -14,10 +14,14 @@ import { useAuthStateListener, signOut as supabaseSignOutClient } from '../supab
 // Extended user type to include additional properties
 export type ExtendedUser = User & {
   role?: UserRole;
-  company?: { 
-    name: string; 
-    id?: string; 
-    planType?: PlanType; 
+  company?: {
+    name: string;
+    id?: string;
+    planType?: PlanType;
+    subscription?: {
+      status: SubscriptionStatus;
+      trial_end: string | null;
+    };
   };
   name?: string;
   image?: string;
@@ -79,7 +83,11 @@ export function SessionProvider({
         company: initialSession.user.user_metadata?.company_name ? { 
           name: initialSession.user.user_metadata.company_name,
           id: initialSession.user.user_metadata.company_id,
-          planType: initialSession.user.user_metadata.plan_type as PlanType
+          planType: initialSession.user.user_metadata.plan_type as PlanType,
+          subscription: initialSession.user.user_metadata.subscription_status ? {
+            status: initialSession.user.user_metadata.subscription_status as SubscriptionStatus,
+            trial_end: initialSession.user.user_metadata.trial_end || null,
+          } : undefined,
         } : undefined,
       },
       role: initialSession.user.user_metadata?.role as UserRole,
@@ -105,7 +113,11 @@ export function SessionProvider({
             company: newSession.user.user_metadata?.company_name ? { 
               name: newSession.user.user_metadata.company_name,
               id: newSession.user.user_metadata.company_id,
-              planType: newSession.user.user_metadata.plan_type as PlanType
+              planType: newSession.user.user_metadata.plan_type as PlanType,
+              subscription: newSession.user.user_metadata.subscription_status ? {
+                status: newSession.user.user_metadata.subscription_status as SubscriptionStatus,
+                trial_end: newSession.user.user_metadata.trial_end || null,
+              } : undefined,
             } : undefined
           },
           role: newSession.role,

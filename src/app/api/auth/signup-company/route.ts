@@ -1,218 +1,142 @@
-import { NextResponse } from "next/server";
-import { supabaseAdmin, applyMigration } from "@/lib/supabase";
-import type { PlanType} from "@/lib/types";
-import { SubscriptionStatus, UserRole } from "@/lib/types";
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { createClient } from "@supabase/supabase-js";
+import { Database } from "@/lib/database.types";
 import { db } from "@/server/db";
-import cuid from 'cuid';
+import { PlanType } from "@/lib/types";
 
+const signupCompanySchema = z.object({
+  companyName: z.string().min(2, "Company name must be at least 2 characters"),
+  email: z.string().email("Invalid email address"),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+    .regex(/[a-z]/, "Password must contain at least one lowercase letter")
+    .regex(/[0-9]/, "Password must contain at least one number")
+    .regex(
+      /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/,
+      "Password must contain at least one special character"
+    ),
+  phone: z.string().optional(),
+  planType: z.nativeEnum(PlanType).default(PlanType.SOLO),
+});
 
-export async function POST(req: Request) {
+export async function POST(request: NextRequest) {
   try {
-    console.log('Starting signup process...');
-    
-    // Apply migration to make password field optional
-    try {
-      await applyMigration();
-    } catch (error) {
-      console.log('Migration already applied or failed:', error);
-      // Continue with signup process even if migration fails
-      // as it might already be applied
-    }
-
+    const body = await request.json();
     const { 
-      name, 
+      companyName, 
       email, 
       password, 
-      companyName,
-      companyEmail,
-      companyPhone,
+      phone, 
       planType 
-    } = (await req.json()) as { 
-      name: string;
-      email: string; 
-      password: string;
-      companyName: string;
-      companyEmail?: string;
-      companyPhone?: string;
-      planType: PlanType;
-    };
+    } = signupCompanySchema.parse(body);
 
-    console.log('Received signup data for:', email);
+    // Verify Supabase URL and key are set
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    // Validate required fields
-    if (!email || !password || !name || !companyName) {
+    if (!supabaseUrl || !supabaseServiceRoleKey) {
       return NextResponse.json(
-        { message: "Missing required fields" },
+        { error: "Supabase configuration is missing" },
+        { status: 500 }
+      );
+    }
+
+    // Create Supabase admin client
+    const supabaseAdmin = createClient<Database>(supabaseUrl, supabaseServiceRoleKey);
+
+    // First check if user exists in Supabase Auth
+    const { data: { users }, error: listUsersError } = await supabaseAdmin.auth.admin.listUsers();
+
+    if (listUsersError) {
+      console.error('Error listing Supabase auth users:', listUsersError);
+      return NextResponse.json(
+        { error: "Failed to check existing users" },
+        { status: 500 }
+      );
+    }
+
+    const existingUser = users.find(u => u.email === email);
+
+    if (existingUser) {
+      return NextResponse.json(
+        { error: "User with this email already exists" },
         { status: 400 }
       );
     }
 
-    console.log('Checking for existing user in Supabase Auth...');
-    
-    // First check if user exists in Supabase Auth
-    const { data: existingAuthUsers, error: listUsersError } = await supabaseAdmin.auth.admin.listUsers();
-    
-    if (listUsersError) {
-      console.error('Error listing Supabase auth users:', listUsersError);
-      return NextResponse.json(
-        { message: "Error checking existing auth user", error: listUsersError.message },
-        { status: 500 }
-      );
-    }
-
-    const authUserExists = existingAuthUsers.users.some(user => user.email === email);
-    
-    if (authUserExists) {
-      return NextResponse.json(
-        { message: "A user with this email address already exists" },
-        { status: 409 }
-      );
-    }
-
-    // Check for existing company
-    console.log('Checking for existing company...');
-    const { data: existingCompany, error: checkCompanyError } = await supabaseAdmin
-      .schema('public')
-      .from('Company') // Changed from 'companies' to 'Company'
-      .select('id')
-      .or(`name.eq.${companyName},email.eq.${companyEmail}`) // Ensure companyEmail is used here
-      .maybeSingle();
-
-    if (checkCompanyError) {
-      console.error('Error checking existing company:', checkCompanyError);
-      return NextResponse.json(
-        { message: "Error checking existing company", error: checkCompanyError.message },
-        { status: 500 }
-      );
-    }
-
-    if (existingCompany) {
-      return NextResponse.json(
-        { message: "A company with this name or email already exists" },
-        { status: 409 }
-      );
-    }
-
-    // Create auth user
-    console.log('Creating auth user...');
-    const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    // Create user in Supabase Auth
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
       user_metadata: {
-        name,
-        role: UserRole.OWNER,
+        company_name: companyName,
+        plan_type: planType,
+        role: 'OWNER'
       }
     });
 
     if (authError) {
-      console.error('Error creating auth user:', authError);
+      console.error('Supabase auth user creation error:', authError);
       return NextResponse.json(
-        { 
-          message: "Error creating auth user",
-          error: authError.message
-        },
+        { error: "Failed to create user in authentication system" },
         { status: 500 }
       );
     }
 
-    // Create company
-    console.log('Creating company...');
-    const trialStartDate = new Date();
-    const trialEndDate = new Date();
-    trialEndDate.setDate(trialStartDate.getDate() + 14); // Set to 14 days from start
-
-    const companyData = {
-      id: cuid(), // Generate unique ID
-      name: companyName,
-      email: companyEmail,
-      phone: companyPhone,
-      planType: planType, // Changed from plan_type to planType
-      subscriptionStatus: SubscriptionStatus.TRIAL, // Changed from subscription_status to subscriptionStatus
-      trialStartDate: trialStartDate.toISOString(), // Changed from trial_start_date to trialStartDate
-      trialEndDate: trialEndDate.toISOString(), // Changed from trial_end_date to trialEndDate
-      updatedAt: new Date().toISOString(), // Add this line
-    };
-
-    console.log('Company data to insert:', JSON.stringify(companyData)); // Log the data being inserted
-
-    const { data: company, error: companyError } = await supabaseAdmin
-      .schema('public')
-      .from('Company') // Changed from 'companies' to 'Company'
-      .insert([companyData])
-      .select()
-      .single();
-
-    if (companyError) {
-      console.error("Error creating company:", JSON.stringify(companyError, null, 2));
-      return new Response(
-        JSON.stringify({
-          message: "Error creating company",
-          error: companyError.message || JSON.stringify(companyError),
-          details: companyError.details || null,
-          hint: companyError.hint || null,
-        }),
-        {
-          status: 500,
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
-    }
-
-    // Create user in our public.User table
-    console.log('Creating public.User entry...');
-    try {
-      const publicUser = await db.user.create({
-        data: {
-          id: authUser.user.id,
-          email: authUser.user.email!,
-          name: name,
-          role: UserRole.OWNER,
-          companyId: company.id,
-        },
-      });
-      console.log('Public user created:', publicUser.id);
-    } catch (publicUserError) {
-      console.error('Error creating public user entry:', publicUserError);
-      // Rollback auth user and company creation if public user creation fails critically
-      await supabaseAdmin.auth.admin.deleteUser(authUser.user.id);
-      await supabaseAdmin.schema('public').from('companies').delete().eq('id', company.id);
-      
-      return new Response(
-        JSON.stringify({
-          message: "Error creating user profile",
-          error: publicUserError instanceof Error ? publicUserError.message : String(publicUserError),
-        }),
-        {
-          status: 500,
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
-    }
-
-    // Update auth user with company ID and other metadata
-    await supabaseAdmin.auth.admin.updateUserById(authUser.user.id, {
-      user_metadata: {
-        ...authUser.user.user_metadata,
-        company_id: company.id,
-        // Add other user profile data here if needed, directly to user_metadata
-        // e.g., phone: companyPhone, jobTitle: 'Owner' 
+    // Create company in database
+    const company = await db.company.create({
+      data: {
+        name: companyName,
+        email,
+        phone,
+        planType,
       }
     });
 
-    console.log('Signup successful!');
+    // Create user in database
+    const user = await db.user.create({
+      data: {
+        id: authData.user.id,
+        email,
+        name: companyName,
+        role: 'OWNER',
+        companyId: company.id,
+      }
+    });
+
     return NextResponse.json(
-      { message: "Signup successful!" },
-      { status: 200 }
+      { 
+        message: "Company and user created successfully",
+        user: { 
+          id: user.id, 
+          email: user.email, 
+          name: user.name, 
+          role: user.role 
+        },
+        company: { 
+          id: company.id, 
+          name: company.name, 
+          planType: company.planType 
+        }
+      },
+      { status: 201 }
     );
   } catch (error) {
-    console.error('An unexpected error occurred during signup:', error);
+    console.error("Signup company error:", error);
+
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: "Invalid input", details: error.errors },
+        { status: 400 }
+      );
+    }
+
     return NextResponse.json(
-      { message: "An unexpected error occurred", error: error instanceof Error ? error.message : String(error) },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }

@@ -100,21 +100,31 @@ export const customerRouter = createTRPCRouter({
           return acc;
         }, {} as Record<string, number>);
 
-        // Calculate growth
-        const previousPeriodWhere = input?.from && input?.to ? {
-          companyId,
-          createdAt: {
-            gte: new Date(input.from.getTime() - (input.to.getTime() - input.from.getTime())),
-            lt: input.from,
-          },
-        } : { companyId };
+        // Calculate growth for the current period (new customers within the period)
+        const newCustomersInPeriod = await ctx.db.customer.count({ where });
 
-        const previousPeriodCustomers = await ctx.db.customer.count({ where: previousPeriodWhere });
+        // For growth, we typically compare to a previous period. 
+        // Let's define a simple previous period as the same duration immediately preceding the current period.
+        const now = new Date();
+        const oneMonthAgo = new Date(now.setMonth(now.getMonth() - 1));
+        const threeMonthsAgo = new Date(now.setMonth(now.getMonth() - 3));
+        const oneYearAgo = new Date(now.setFullYear(now.getFullYear() - 1));
 
-        // Calculate growth percentage
-        const growthValue = previousPeriodCustomers > 0 
-          ? ((totalCustomers - previousPeriodCustomers) / previousPeriodCustomers) * 100 
-          : 0;
+        const getCustomersCountForPeriod = async (startDate: Date, endDate: Date) => {
+          return await ctx.db.customer.count({
+            where: {
+              companyId,
+              createdAt: {
+                gte: startDate,
+                lte: endDate,
+              },
+            },
+          });
+        };
+
+        const newCustomersLastMonth = await getCustomersCountForPeriod(oneMonthAgo, new Date());
+        const newCustomersLastQuarter = await getCustomersCountForPeriod(threeMonthsAgo, new Date());
+        const newCustomersLastYear = await getCustomersCountForPeriod(oneYearAgo, new Date());
 
         return {
           totalCustomers,
@@ -123,9 +133,9 @@ export const customerRouter = createTRPCRouter({
           industrial: typeStats.industrial || 0,
           growth: {
             total: {
-              isPositive: growthValue >= 0,
-              value: Math.abs(Number(growthValue.toFixed(2))),
-              period: input?.from && input?.to ? 'month' : 'all time',
+              isPositive: newCustomersInPeriod >= 0, // Always true if counting new customers
+              value: newCustomersInPeriod,
+              period: input?.from && input?.to ? 'custom' : 'current',
             },
             residential: {
               isPositive: (typeStats.residential || 0) > 0,
@@ -207,6 +217,8 @@ export const customerRouter = createTRPCRouter({
             email: true,
             phone: true,
             address: true,
+            latitude: true,
+            longitude: true,
             type: true,
             createdAt: true,
             updatedAt: true,

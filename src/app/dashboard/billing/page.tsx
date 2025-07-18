@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession } from '@/lib/providers/session-provider';
 import { api } from '@/trpc/react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,7 +17,7 @@ import { getTrialDaysRemaining, isTrialEndingSoon, formatTrialEndDate } from '@/
 import { User, Users, Building2, Crown } from 'lucide-react';
 
 export default function BillingPage() {
-  const { data: session } = useSession();
+  const { session } = useSession();
   const [selectedPlan, setSelectedPlan] = useState<PlanType | null>(null);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [isUpgrading, setIsUpgrading] = useState(false);
@@ -59,10 +59,16 @@ export default function BillingPage() {
     
     try {
       // Upgrade plan
-      await api.billing.upgradePlan.mutate({ planType: selectedPlan! });
-      
-      setShowPaymentForm(false);
-      setSelectedPlan(null);
+      if (selectedPlan) {
+        const result = await api.billing.upgradePlan.mutate({ planType: selectedPlan });
+        
+        if (result.success) {
+          setShowPaymentForm(false);
+          setSelectedPlan(null);
+        } else {
+          console.error('Payment failed:', result.message);
+        }
+      }
     } catch (error) {
       console.error('Payment failed:', error);
     } finally {
@@ -109,7 +115,7 @@ export default function BillingPage() {
         </CardHeader>
         <CardContent>
           {paymentMethods?.length ? (
-            paymentMethods.map((method: PaymentMethod) => (
+            paymentMethods.map((method) => (
               <div key={method.id}>
                 {method.type} ending in {method.last4}
               </div>
@@ -127,7 +133,7 @@ export default function BillingPage() {
         </CardHeader>
         <CardContent>
           {invoicesData?.length ? (
-            invoicesData.map((invoice: Invoice) => (
+            invoicesData.map((invoice) => (
               <div key={invoice.id}>
                 Invoice for {invoice.planName} - €{invoice.amount} ({invoice.status})
               </div>

@@ -1,24 +1,30 @@
 import { CustomerDetailClient } from "./CustomerDetailClient";
 import { auth } from "@/server/auth";
 import { redirect } from "next/navigation";
-import { Metadata } from "next";
-import { NextPageProps } from "@/lib/types";
+import { Metadata, ResolvingMetadata } from "next";
 
-export async function generateMetadata({ params }: NextPageProps<{ id: string }>): Promise<Metadata> {
+export async function generateMetadata(
+  { params }: { params: Promise<{ id: string }> },
+  parent: ResolvingMetadata
+): Promise<Metadata> {
+  const resolvedParams = await params;
   return {
-    title: `Customer #${params.id} | FixFlow`,
-    description: `Details for customer #${params.id}`,
+    title: `Customer #${resolvedParams.id} | FixFlow`,
+    description: `Details for customer #${resolvedParams.id}`,
   };
 }
 
 export default async function CustomerDetailPage({ 
   params 
-}: NextPageProps<{ id: string }>) {
+}: { 
+  params: Promise<{ id: string }> 
+}) {
   const session = await auth();
+  const resolvedParams = await params;
 
   if (!session?.user) {
     redirect("/login");
   }
 
-  return <CustomerDetailClient customerId={params.id} session={session} />;
+  return <CustomerDetailClient customerId={resolvedParams.id} session={session} />;
 } 

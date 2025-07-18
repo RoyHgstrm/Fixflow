@@ -43,8 +43,8 @@ export default function DesktopSidebar({
   return (
     <div
       className={`
-        fixed left-0 top-0 h-full shadow-lg transition-all duration-300 hidden md:block
-        ${isCollapsed ? "w-16" : "w-64"} ${navConfig.bgColor}
+        fixed left-0 top-0 h-full shadow-lg transition-all duration-300 hidden md:block bg-base-100
+        ${isCollapsed ? "w-16" : "w-64"} 
       `}
     >
       <div className="flex h-full flex-col">

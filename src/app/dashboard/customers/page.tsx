@@ -2,13 +2,12 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/providers/session-provider";
 import { Users, User, AlertCircle, Loader2 } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
 
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { CustomerType, CustomerStats, type CustomerWithRelations } from "@/lib/types";
-import type { Session } from "next-auth";
 import { useRouter } from "next/navigation";
 
 import { CustomerHeader } from "./_components/CustomerHeader";
@@ -40,7 +39,7 @@ const containerVariants = {
 };
 
 export default function CustomersPage() {
-  const { data: session } = useSession();
+  const { session } = useSession();
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<string>("all");
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
@@ -51,7 +50,7 @@ export default function CustomersPage() {
   const router = useRouter();
 
   // Get user role for role-based functionality
-  const userRole = session?.user?.role ?? "ADMIN";
+  const userRole = session?.user?.role ?? "CLIENT";
   
   // Set dynamic page title
   usePageTitle(userRole);
@@ -117,10 +116,6 @@ export default function CustomersPage() {
   // Ensure type safety for stats
   const safeStats: CustomerStats = {
     totalCustomers: statsData?.totalCustomers ?? 0,
-    newCustomers: statsData?.newCustomers ?? 0,
-    customersWithActiveWorkOrders: statsData?.customersWithActiveWorkOrders ?? 0,
-    averageWorkOrdersPerCustomer: statsData?.averageWorkOrdersPerCustomer ?? 0,
-    total: statsData?.total ?? 0,
     residential: statsData?.residential ?? 0,
     commercial: statsData?.commercial ?? 0,
     industrial: statsData?.industrial ?? 0,

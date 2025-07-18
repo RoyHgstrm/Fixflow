@@ -49,7 +49,7 @@ export function CustomerStatsOverview({ stats }: CustomerStatsOverviewProps) {
         {[
           {
             title: "Total Customers",
-            value: stats?.total ?? 0,
+            value: stats?.totalCustomers ?? 0,
             icon: Users,
             growth: stats?.growth?.total ?? { isPositive: true, value: 0, period: 'month' },
           },

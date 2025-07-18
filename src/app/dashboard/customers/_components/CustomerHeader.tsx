@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { PlusCircle, Users, Map as MapIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PrimaryActionButton } from "@/components/ui/action-button";
-import { type Session } from "next-auth";
+import { CustomSession } from "@/lib/types";
 
 const cardVariants = {
   hidden: { opacity: 0, y: 20 },

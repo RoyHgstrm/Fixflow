@@ -38,11 +38,11 @@ export const MapContainer = ({
   );
 };
 
-export function CustomerMap({ 
-  coordinates, 
+export function BaseMap({ 
+  locations, 
   zoom = 10 
 }: { 
-  coordinates: [number, number][], 
+  locations: Array<{ id: string; name: string; address?: string; latitude: number; longitude: number; type: 'customer' | 'work_order' }>, 
   zoom?: number 
 }) {
   const mapRef = useRef<HTMLDivElement>(null);
@@ -69,10 +69,12 @@ export function CustomerMap({
       source: vectorSource
     });
 
-    // Add markers for each coordinate
-    coordinates.forEach(coord => {
+    // Add markers for each location
+    locations.forEach(location => {
       const feature = new Feature({
-        geometry: new Point(fromLonLat(coord))
+        geometry: new Point(fromLonLat([location.longitude, location.latitude])),
+        name: location.name,
+        address: location.address,
       });
 
       // Optional: Add a custom marker style
@@ -96,15 +98,15 @@ export function CustomerMap({
         vectorLayer // Add the vector layer with markers
       ],
       view: new View({
-        center: coordinates.length > 0 
-          ? fromLonLat(coordinates[0]) 
+        center: locations.length > 0 
+          ? fromLonLat([locations[0].longitude, locations[0].latitude]) 
           : fromLonLat([24.9384, 60.1699]), // Default to Helsinki
         zoom: zoom
       })
     });
 
-    // Adjust view to fit all markers if multiple coordinates
-    if (coordinates.length > 1) {
+    // Adjust view to fit all markers if multiple locations
+    if (locations.length > 1) {
       const extent = vectorSource.getExtent();
       mapInstance.current.getView().fit(extent, {
         padding: [50, 50, 50, 50],
@@ -118,7 +120,7 @@ export function CustomerMap({
         mapInstance.current.dispose();
       }
     };
-  }, [coordinates, zoom]);
+  }, [locations, zoom]);
 
   return (
     <MapContainer>
@@ -159,4 +161,4 @@ export async function geocodeAddress(address: string): Promise<[number, number] 
   }
 }
 
-export default CustomerMap; 
+export default BaseMap; 

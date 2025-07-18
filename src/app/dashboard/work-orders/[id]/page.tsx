@@ -1,24 +1,30 @@
 import { WorkOrderDetailClient } from "./WorkOrderDetailClient";
 import { auth } from "@/server/auth";
 import { redirect } from "next/navigation";
-import { Metadata } from "next";
-import { NextPageProps } from "@/lib/types";
+import { Metadata, ResolvingMetadata } from "next";
 
-export async function generateMetadata({ params }: NextPageProps<{ id: string }>): Promise<Metadata> {
+export async function generateMetadata(
+  { params }: { params: Promise<{ id: string }> },
+  parent: ResolvingMetadata
+): Promise<Metadata> {
+  const resolvedParams = await params;
   return {
-    title: `Work Order #${params.id} | FixFlow`,
-    description: `Details for work order #${params.id}`,
+    title: `Work Order #${resolvedParams.id} | FixFlow`,
+    description: `Details for work order #${resolvedParams.id}`,
   };
 }
 
 export default async function WorkOrderDetailPage({ 
   params 
-}: NextPageProps<{ id: string }>) {
+}: { 
+  params: Promise<{ id: string }> 
+}) {
   const session = await auth();
+  const resolvedParams = await params;
 
   if (!session?.user) {
     redirect("/login");
   }
 
-  return <WorkOrderDetailClient params={params} session={session} />;
+  return <WorkOrderDetailClient params={resolvedParams} session={session} />;
 } 

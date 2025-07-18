@@ -281,7 +281,12 @@ export interface ApiError {
 export interface ExtendedUser extends User {
   role?: UserRole;
   companyId?: string | null; // Add companyId here
-  company?: { name: string; id?: string; planType?: PlanType }; // Include optional id for company and planType
+  company?: { 
+    name: string; 
+    id?: string; 
+    planType?: PlanType; 
+    users?: UserWithRole[]; // Add optional users array
+  }; 
   name?: string | null; // Allow null as it might not always be set
   image?: string; // Add image field
 }
@@ -613,12 +618,8 @@ export type Invoice = {
   downloadUrl?: string;
 }; 
 
-export interface CustomerStats {
+export type CustomerStats = {
   totalCustomers: number;
-  newCustomers: number;
-  customersWithActiveWorkOrders: number;
-  averageWorkOrdersPerCustomer: number;
-  total: number;
   residential: number;
   commercial: number;
   industrial: number;
@@ -644,10 +645,18 @@ export interface CustomerStats {
       period: string;
     };
   };
-} 
+};
 
 // Add a utility type for Next.js page props
 export type NextPageProps<T extends { id: string }> = {
   params: T & { then?: never };
   searchParams?: { [key: string]: string | string[] | undefined };
 }; 
+
+export enum SubscriptionStatus {
+  TRIAL = 'TRIAL',
+  ACTIVE = 'ACTIVE',
+  PAST_DUE = 'PAST_DUE',
+  CANCELLED = 'CANCELLED',
+  EXPIRED = 'EXPIRED',
+} 

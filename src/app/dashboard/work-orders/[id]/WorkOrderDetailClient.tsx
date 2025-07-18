@@ -1,6 +1,6 @@
 'use client';
 
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/providers/session-provider";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -34,7 +34,7 @@ import { motion } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { WorkOrderStatus, UserRole } from "@/lib/types";
+import { WorkOrderStatus, UserRole, type UserWithRole } from "@/lib/types";
 import { toast } from "sonner";
 import { getWorkOrderTypeIcon, getStatusColor, getPriorityColor, getStatusIcon } from "@/lib/utils";
 import type { WorkOrderWithRelations , WorkOrderPriority, WorkOrderType} from "@/lib/types"; // Corrected to type-only import
@@ -123,6 +123,9 @@ export function WorkOrderDetailClient({ params, session }: WorkOrderDetailClient
 
   // Get user role safely
   const userRole = session?.user?.role || 'ADMIN';
+
+  // Dynamically load users from session's company
+  const users: UserWithRole[] = session?.user?.company?.users || [];
   
   // Set dynamic page title
   usePageTitle(userRole);
@@ -535,7 +538,7 @@ export function WorkOrderDetailClient({ params, session }: WorkOrderDetailClient
                         <SelectContent className="glass backdrop-blur-xl">
                           <SelectItem value="unassigned">Unassigned</SelectItem>
                           {/* TODO: Dynamically load users from API */}
-                          {session?.user?.company?.users?.map(user => (
+                          {users.map(user => (
                             <SelectItem key={user.id} value={user.id}>
                               {user.name}
                             </SelectItem>

@@ -21,7 +21,7 @@ export function TrialBanner({ company: initialCompany }: TrialBannerProps = {}) 
 
   const companyName = company?.name ?? initialCompany?.name;
 
-  if (status !== SubscriptionStatus.TRIALING) {
+  if (status !== SubscriptionStatus.TRIAL || daysRemaining === null || daysRemaining <= 0) {
     return null;
   }
 
