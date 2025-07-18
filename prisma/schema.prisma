@@ -194,6 +194,8 @@ model Customer {
     type        CustomerType @default(RESIDENTIAL)
     notes       String?
     isActive    Boolean      @default(true)
+    latitude    Float?
+    longitude   Float?
     createdAt   DateTime     @default(now())
     updatedAt   DateTime     @updatedAt
     

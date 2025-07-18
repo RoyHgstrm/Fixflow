@@ -5,7 +5,6 @@ import {
   InvoiceStatus, 
   CustomerType,
   PlanType,
-  SubscriptionStatus,
   InvitationStatus
 } from '@prisma/client';
 import { type Session } from '@supabase/supabase-js';
@@ -18,7 +17,6 @@ export {
   InvoiceStatus, 
   CustomerType,
   PlanType,
-  SubscriptionStatus,
   InvitationStatus
 };
 
@@ -658,5 +656,5 @@ export enum SubscriptionStatus {
   ACTIVE = 'ACTIVE',
   PAST_DUE = 'PAST_DUE',
   CANCELLED = 'CANCELLED',
-  EXPIRED = 'EXPIRED',
+  EXPIRED = 'EXPIRED'
 } 

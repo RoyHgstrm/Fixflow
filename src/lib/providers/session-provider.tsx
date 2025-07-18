@@ -8,7 +8,7 @@ import {
   ReactNode
 } from 'react';
 import { Session, User } from '@supabase/supabase-js';
-import { UserRole, PlanType } from '../types';
+import { UserRole, PlanType, SubscriptionStatus } from '../types';
 import { useAuthStateListener, signOut as supabaseSignOutClient } from '../supabase/client';
 
 // Extended user type to include additional properties

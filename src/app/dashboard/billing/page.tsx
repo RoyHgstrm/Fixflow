@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { 
   PlanType, 
-  SubscriptionStatus, 
   CompanyWithSubscription, 
   PaymentMethod, 
   Invoice 
@@ -38,7 +37,7 @@ export default function BillingPage() {
 
   const company = companyData ?? {
     planType: PlanType.SOLO,
-    subscriptionStatus: SubscriptionStatus.TRIAL,
+    subscriptionStatus: 'TRIAL',
     trialStartDate: new Date(),
     trialEndDate: new Date(),
     isActive: true,
@@ -46,7 +45,7 @@ export default function BillingPage() {
 
   const currentPlan = PLAN_CONFIGS[company.planType];
   const daysRemaining = getTrialDaysRemaining(company.trialEndDate);
-  const isOnTrial = company.subscriptionStatus === SubscriptionStatus.TRIAL;
+  const isOnTrial = company.subscriptionStatus === 'TRIAL';
   const trialEndingSoon = isTrialEndingSoon(company.trialEndDate);
 
   const handleUpgradePlan = async (planType: PlanType) => {
