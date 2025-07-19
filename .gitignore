@@ -1,74 +1,89 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# Modern FixFlow SaaS Platform - Optimized Ignore Rules
 
-# Node
-node_modules/
-.pnpm
-.pnp*
+### Core Environments ###
+.env*
+!.env.example
 
-# Next.js
+### Build Artifacts ###
 .next/
 out/
 build/
-
-# Testing
-coverage/
-playwright-report/
-
-# Database
-prisma/db.sqlite*
-db.sqlite*
-
-# Env files
-.env*
-
-# Vercel
-.vercel/
-
-# TypeScript
+dist/
 *.tsbuildinfo
 
-# Logs
+### Dependencies ###
+node_modules/
+.pnpm
+.pnp*
+.cache/
+.yarn/
+
+### Testing & Coverage ###
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+*.html
+*.lcov
+
+### Database & Local Storage ###
+*.sqlite*
+*.db
+*.dump
+*.backup
+*.wal
+*.shm
+
+### Logs & Diagnostics ###
+*.log*
+*.logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+*.pid
+*.pid.*
+*.seed
 
-# Documentation
-*.md
-*.mdx
-docs/
-userflow.md
-DEPLOYMENT.md
-design-guidelines.md
-rules.md
-Style_Guidelines.md
-todo.md
-
-# Build artifacts
-*.log
-*.tmp
-*.bak
-*.swp
-*.swo
-
-# IDE and OS specific files
+### Editor & IDE ###
+.cursor/
 .idea/
 .vscode/
+.kiro/
+*.code-workspace
+*.sublime-project
+*.sublime-workspace
+
+### System Files ###
 .DS_Store
 Thumbs.db
 Desktop.ini
 __MACOSX/
+*.swp
+*.swo
+*.bak
+*.tmp
 
-# Others
-*.local
-count.txt
-.tanstack
-temp_check_supabase_users.ts
+### Documentation ###
+# Keep specific docs but ignore generated/transient ones
+/userflow.md
+/DEPLOYMENT.md
+/design-guidelines.md
+/rules.md
+/Style_Guidelines.md
+/todo.md
+/docs/
 
-# Docker
-docker-compose.yml
-Dockerfile
-.dockerignore
+### CI & Deployment ###
+.vercel/
+.netlify
+.gh-pages/
+.github/actions/
+.github/workflows/temp-*
+!.github/workflows/main.yml
 
-# Prevent secrets from being committed
-!*.env.example
+### Special Cases ###
+!.gitkeep
+!.dockerignore
+!.eslintrc.cjs
+!.prettierrc
