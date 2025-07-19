@@ -1,74 +1,77 @@
-import { type Session } from '@supabase/supabase-js';
-import { User } from '@supabase/supabase-js';
+import { 
+  WorkOrderStatus, 
+  WorkOrderPriority, 
+  CustomerType, 
+  InvitationStatus, 
+  WorkOrderType, 
+  PlanType, 
+  SubscriptionStatus, 
+  InvoiceStatus 
+} from '@prisma/client';
 
-// Explicitly define enums that were previously imported from @prisma/client
-export enum UserRole {
-  OWNER = 'OWNER',
-  MANAGER = 'MANAGER',
-  EMPLOYEE = 'EMPLOYEE',
-  ADMIN = 'ADMIN',
-  TECHNICIAN = 'TECHNICIAN',
-  CLIENT = 'CLIENT',
+export {
+  WorkOrderStatus,
+  WorkOrderPriority,
+  CustomerType,
+  InvitationStatus,
+  WorkOrderType,
+  PlanType,
+  SubscriptionStatus,
+  InvoiceStatus,
+};
+
+export const USER_ROLES = {
+  SOLO: 'SOLO',
+  TEAM: 'TEAM',
+  BUSINESS: 'BUSINESS',
+  ENTERPRISE: 'ENTERPRISE',
+  FIELD_WORKER: 'FIELD_WORKER',
+  CLIENT: 'CLIENT',
+  ADMIN: 'ADMIN',
+  OWNER: 'OWNER',
+  MANAGER: 'MANAGER',
+  EMPLOYEE: 'EMPLOYEE',
+  TECHNICIAN: 'TECHNICIAN'
+} as const;
+
+export type UserRole = typeof USER_ROLES[keyof typeof USER_ROLES]; // Correct position
+
+// Placeholder for Supabase User type - ensures compatibility
+// If you use `@supabase/supabase-js`, ensure it's correctly installed and its types are available.
+// For now, we'll define the necessary fields for ExtendedUser.
+interface BaseSupabaseUser {
+  id: string;
+  email?: string | null;
+  user_metadata?: { [key: string]: any };
+  // Add other properties you rely on from Supabase User if needed
 }
 
-export enum WorkOrderStatus {
-  PENDING = 'PENDING',
-  ASSIGNED = 'ASSIGNED',
-  IN_PROGRESS = 'IN_PROGRESS',
-  COMPLETED = 'COMPLETED',
-  CANCELLED = 'CANCELLED',
+export interface ExtendedUser extends BaseSupabaseUser {
+  role?: UserRole;
+  companyId?: string | null;
+  company?: {
+    name: string;
+    id?: string;
+    planType: PlanType;
+    users?: UserWithRole[];
+    subscription?: {
+      status: SubscriptionStatus;
+      trial_end: string | null;
+    };
+  };
+  name?: string | null;
+  image?: string;
 }
 
-export enum WorkOrderPriority {
-  LOW = 'LOW',
-  MEDIUM = 'MEDIUM',
-  HIGH = 'HIGH',
-  URGENT = 'URGENT',
-}
-
-export enum CustomerType {
-  RESIDENTIAL = 'RESIDENTIAL',
-  COMMERCIAL = 'COMMERCIAL',
-  INDUSTRIAL = 'INDUSTRIAL',
-}
-
-export enum InvitationStatus {
-  PENDING = 'PENDING',
-  ACCEPTED = 'ACCEPTED',
-  DECLINED = 'DECLINED',
-  EXPIRED = 'EXPIRED',
-}
-
-export enum WorkOrderType {
-  INSTALLATION = 'INSTALLATION',
-  MAINTENANCE = 'MAINTENANCE',
-  REPAIR = 'REPAIR',
-  TROUBLESHOOTING = 'TROUBLESHOOTING',
-  INSPECTION = 'INSPECTION',
-  OTHER = 'OTHER',
-}
-
-// Plan configuration
-export enum PlanType {
-  SOLO = 'SOLO',
-  TEAM = 'TEAM',
-  BUSINESS = 'BUSINESS',
-  ENTERPRISE = 'ENTERPRISE',
-}
-
-export enum SubscriptionStatus {
-  TRIAL = 'TRIAL',
-  ACTIVE = 'ACTIVE',
-  PAST_DUE = 'PAST_DUE',
-  CANCELLED = 'CANCELLED',
-  EXPIRED = 'EXPIRED'
-}
-
-export enum InvoiceStatus {
-  DRAFT = 'DRAFT',
-  PENDING = 'PENDING',
-  PAID = 'PAID',
-  OVERDUE = 'OVERDUE',
+export interface CustomSession {
+  user: ExtendedUser;
+  role?: UserRole;
+  userRole?: UserRole;
+  expires?: string;
+  access_token?: string;
+  refresh_token?: string;
+  expires_in?: number;
+  token_type?: string;
 }
 
 export interface PlanFeatures {
@@ -142,16 +145,15 @@ export const PLAN_CONFIGS: Record<PlanType, PlanFeatures> = {
 
 // Helper function to get remaining trial days
 export function getTrialDaysRemaining(trialEndDate: Date | string): number {
-  const now = new Date();
-  const endDate = trialEndDate instanceof Date ? trialEndDate : new Date(trialEndDate);
-  const diffTime = endDate.getTime() - now.getTime();
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  return Math.max(0, diffDays);
+  const today = new Date();
+  const endDate = new Date(trialEndDate);
+  const timeDiff = endDate.getTime() - today.getTime();
+  return Math.ceil(timeDiff / (1000 * 3600 * 24));
 }
 
 // Helper function to check if trial is ending soon (<= 3 days)
 export function isTrialEndingSoon(trialEndDate: Date | string): boolean {
-  return getTrialDaysRemaining(trialEndDate) <= 3;
+  return getTrialDaysRemaining(trialEndDate) <= 5; // Assuming 5 days threshold
 }
 
 // Type definitions for API responses with new company structure
@@ -159,12 +161,18 @@ export interface CompanyWithSubscription {
   id: string;
   name: string;
   email?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
   planType: PlanType;
   subscriptionStatus: SubscriptionStatus;
   trialStartDate: Date | string;
   trialEndDate: Date | string;
   isActive: boolean;
   createdAt: Date | string;
+  updatedAt: Date | string;
   users?: UserWithRole[];
   _count?: {
     users: number;
@@ -255,35 +263,31 @@ export interface DashboardStats {
 export enum UserExperience {
   SOLO_OPERATOR = 'SOLO_OPERATOR',
   FIELD_WORKER = 'FIELD_WORKER',
-  TEAM_MANAGER = 'TEAM_MANAGER'
+  TEAM_MANAGER = 'TEAM_MANAGER',
+  CLIENT = 'CLIENT',
 }
 
 // Helper function to determine user experience type
 export function getUserExperience(role: UserRole): UserExperience {
-  switch (role) {
-  case UserRole.OWNER:
-  case UserRole.MANAGER:
-  case UserRole.ADMIN:
-    return UserExperience.TEAM_MANAGER;
-  case UserRole.EMPLOYEE:
-  case UserRole.TECHNICIAN:
-    return UserExperience.FIELD_WORKER;
-  case UserRole.CLIENT:
-  default:
+  if (role === USER_ROLES.SOLO) {
     return UserExperience.SOLO_OPERATOR;
+  } else if (role === USER_ROLES.FIELD_WORKER || role === USER_ROLES.TECHNICIAN) {
+    return UserExperience.FIELD_WORKER;
+  } else if (role === USER_ROLES.OWNER || role === USER_ROLES.MANAGER || role === USER_ROLES.ADMIN) {
+    return UserExperience.TEAM_MANAGER;
+  } else if (role === USER_ROLES.CLIENT) {
+    return UserExperience.CLIENT;
   }
+  return UserExperience.SOLO_OPERATOR; // Default fallback
 }
 
 // Enhanced trial management utility functions
 export function isTrialExpired(trialEndDate: Date | string): boolean {
-  const now = new Date();
-  const endDate = trialEndDate instanceof Date ? trialEndDate : new Date(trialEndDate);
-  return now > endDate;
+  return new Date(trialEndDate) < new Date();
 }
 
 export function formatTrialEndDate(trialEndDate: Date | string): string {
-  const date = trialEndDate instanceof Date ? trialEndDate : new Date(trialEndDate);
-  return date.toLocaleDateString('en-US', {
+  return new Date(trialEndDate).toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',
     day: 'numeric'
@@ -312,29 +316,6 @@ export interface ApiError {
   details?: unknown;
 }
 
-export interface ExtendedUser extends User {
-  role?: UserRole;
-  companyId?: string | null; // Add companyId here
-  company?: { 
-    name: string; 
-    id?: string; 
-    planType?: PlanType; 
-    users?: UserWithRole[]; // Add optional users array
-  }; 
-  name?: string | null; // Allow null as it might not always be set
-  image?: string; // Add image field
-}
-
-export interface CustomSession {
-  user: ExtendedUser;
-  role?: UserRole;
-  expires?: string; // Make expires optional here
-  access_token?: string; 
-  refresh_token?: string; 
-  expires_in?: number; 
-  token_type?: string; 
-}
-
 export interface WorkOrderBase {
   id: string;
   title: string;
@@ -359,15 +340,15 @@ export interface WorkOrderWithRelations extends WorkOrderBase {
   customer: {
     id: string;
     name: string;
-    email?: string;
-    phone?: string;
+    email?: string | null; // Allow null
+    phone?: string | null; // Allow null and undefined
     address?: string | null;
   };
-  assignedTo?: {
+  assignedTo?: { // Make assignedTo optional and allow null
     id: string;
     name: string;
     email: string;
-  };
+  } | null;
   createdBy: {
     id: string;
     name: string;
@@ -404,7 +385,11 @@ export interface CreatedByExtended extends CreatedByBase {
 }
 
 export interface CustomerWithRelations extends CustomerBase {
-  createdBy: CreatedByBase;
+  createdBy?: { // createdBy is optional as it might not always be included
+    id?: string;
+    name?: string | null;
+    email?: string | null;
+  };
   workOrders?: WorkOrderWithRelations[];
   _count?: {
     workOrders: number;
@@ -442,11 +427,13 @@ export interface InvoiceWithRelations extends InvoiceData {
   };
 }
 
-export interface PaginatedResponse<T> {
+export type PaginatedResult<T> = {
   items: T[];
   nextCursor?: string;
   hasMore: boolean;
 }
+
+export type PaginatedResponse<T> = PaginatedResult<T>;
 
 export interface WorkOrderResponse extends WorkOrderBase {
   customer: {
@@ -599,7 +586,7 @@ export interface MapLocation {
   name: string;
   latitude: number;
   longitude: number;
-  type: 'customer' | 'work_order';
+  type?: 'customer' | 'work_order'; // Make type optional
   address?: string;
   status?: WorkOrderStatus;
 }
@@ -611,14 +598,14 @@ export interface MapBounds {
   west: number;
 }
 
-export type RequiredFields<T, K extends keyof T> = T & Required<Pick<T, K>>;
-export type OptionalFields<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
-export type CreateInput<T> = Omit<T, 'id' | 'createdAt' | 'updatedAt'>;
-export type UpdateInput<T> = Partial<Omit<T, 'id' | 'createdAt' | 'updatedAt'>>;
+export type RequiredFields<T, K extends keyof T> = T & Required<Pick<T, K>>; 
+export type OptionalFields<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>; 
+export type CreateInput<T> = Omit<T, 'id' | 'createdAt' | 'updatedAt'>; 
+export type UpdateInput<T> = Partial<Omit<T, 'id' | 'createdAt' | 'updatedAt'>>; 
 
 export type SafeWorkOrderWithRelations = WorkOrderWithRelations;
 export type SafeCustomerWithRelations = CustomerWithRelations;
-export type SafeInvoiceWithRelations = InvoiceWithRelations; 
+export type SafeInvoiceWithRelations = InvoiceWithRelations;
 
 export type PaymentMethod = {
   id: string;
@@ -632,7 +619,7 @@ export type PaymentMethod = {
 
 export type Invoice = {
   id: string;
-  number?: string; 
+  number?: string;
   date: Date;
   amount: number;
   status: InvoiceStatus;
@@ -645,31 +632,33 @@ export type CustomerStats = {
   residential: number;
   commercial: number;
   industrial: number;
-  growth: {
-    total: {
-      isPositive: boolean;
-      value: number;
-      period: string;
-    };
-    residential: {
-      isPositive: boolean;
-      newCustomers: number;
-      period: string;
-    };
-    commercial: {
-      isPositive: boolean;
-      newCustomers: number;
-      period: string;
-    };
-    industrial: {
-      isPositive: boolean;
-      newCustomers: number;
-      period: string;
-    };
-  };
 };
 
 export type NextPageProps<T extends { id: string }> = {
   params: T & { then?: never };
   searchParams?: { [key: string]: string | string[] | undefined };
+};
+
+export type ReportsStats = {
+  totalRevenue: number;
+  newCustomers: number;
+  completedWorkOrders: number;
+  pendingWorkOrders: number;
+  inProgressWorkOrders: number;
+  assignedWorkOrders: number;
+  cancelledWorkOrders: number;
+  averageCompletionTime: number;
+  revenueOverTime: { date: Date | null; revenue: number | null }[];
+  workOrdersByType: { type: WorkOrderType; count: number }[];
+  residentialCustomers: number;
+  commercialCustomers: number;
+  industrialCustomers: number;
+  topCustomersByRevenue: {
+    id: string;
+    name: string | null;
+    email: string | null;
+    totalRevenue: number;
+    workOrderCount: number;
+  }[];
+  workOrdersByPriority: { priority: WorkOrderPriority; count: number }[];
 }; 

@@ -2,9 +2,9 @@
 
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { ReactNode, useState } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Session } from '@supabase/supabase-js';
+// Removed: import { Session } from '@supabase/supabase-js';
 
 // Supabase Authentication
 import { signOut } from '@/lib/supabase/client';
@@ -30,22 +30,34 @@ import {
 import { TrialBanner } from '@/components/ui/trial-banner';
 import { usePageTitle } from '@/lib/hooks/use-page-title';
 import { getNavConfig, iconMap, NavLink, NavConfig } from '@/lib/navigation-utils';
-import { UserRole } from '@/lib/types';
+import { CustomSession, UserRole, USER_ROLES } from '@/lib/types';
 import MobileSidebar from './_components/MobileSidebar';
 import DesktopSidebar from './_components/DesktopSidebar';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
-import { CustomSession, useSession } from '@/lib/providers/session-provider';
 import { SessionProvider } from '@/lib/providers/session-provider';
+import { cn } from '@/lib/utils';
+
+// Responsive layout variants
+const layoutVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      duration: 0.3,
+      ease: 'easeInOut',
+    },
+  },
+};
 
 const getRoleLabel = (role: UserRole) => {
-  switch (role.toUpperCase()) {
-    case UserRole.OWNER: return 'Owner';
-    case UserRole.MANAGER: return 'Manager';
-    case UserRole.EMPLOYEE: return 'Employee';
-    case UserRole.ADMIN: return 'Administrator';
-    case UserRole.TECHNICIAN: return 'Technician';
-    case UserRole.CLIENT: return 'Client';
-    default: return 'User';
+  switch (role) {
+  case USER_ROLES.OWNER: return 'Owner';
+  case USER_ROLES.MANAGER: return 'Manager';
+  case USER_ROLES.EMPLOYEE: return 'Employee';
+  case USER_ROLES.ADMIN: return 'Administrator';
+  case USER_ROLES.TECHNICIAN: return 'Technician';
+  case USER_ROLES.CLIENT: return 'Client';
+  default: return 'User';
   }
 };
 
@@ -88,17 +100,31 @@ const contentVariants = {
 
 function DashboardLayoutContent({
   children,
+  session
 }: {
   children: ReactNode;
+  session: CustomSession;
 }): React.ReactElement {
-  const { session } = useSession();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDesktopSidebarCollapsed, setIsDesktopSidebarCollapsed] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const pathname = usePathname();
 
+  // Responsive breakpoint tracking
+  const [isMobile, setIsMobile] = useState(false);
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 1024); // Tailwind's lg breakpoint
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   // Get user role from session
-  const userRole = session?.user?.role || UserRole.CLIENT; // Default to CLIENT if role is undefined
+  const userRole = session?.user?.role || USER_ROLES.CLIENT;
   const navConfig = getNavConfig(userRole, session?.user?.company);
   const RoleIcon = iconMap[navConfig.icon];
 
@@ -111,16 +137,28 @@ function DashboardLayoutContent({
 
   const handleSignOut = async () => {
     await signOut();
-    // Redirect to login page
     window.location.href = '/login';
   };
 
   if (!session) return <div>Loading...</div>;
 
   return (
-    <div className="flex min-h-screen bg-background">
-      {/* Mobile Header */}
-      <div className="fixed top-0 left-0 right-0 z-50 lg:hidden h-16 glass backdrop-blur-xl border-b border-border/50">
+    <motion.div
+      variants={layoutVariants}
+      initial="hidden"
+      animate="visible"
+      className={cn(
+        "flex min-h-screen bg-background",
+        isMobile ? "flex-col" : "flex-row"
+      )}
+    >
+      {/* Responsive Mobile Header */}
+      <header 
+        className={cn(
+          "fixed top-0 left-0 right-0 z-50 lg:hidden h-16 glass backdrop-blur-xl border-b border-border/50",
+          isMobile ? "block" : "hidden"
+        )}
+      >
         <div className="flex items-center justify-between h-full px-4">
           <div className="flex items-center gap-3">
             <Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
@@ -129,15 +167,16 @@ function DashboardLayoutContent({
                   <Menu className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="left" className="w-80 glass backdrop-blur-xl p-0 border-border/50">
+              <SheetContent 
+                side="left" 
+                className="w-80 glass backdrop-blur-xl p-0 border-border/50 lg:hidden"
+              >
                 <MobileSidebar 
                   navConfig={navConfig} 
                   session={session} 
                   userRole={userRole}
                   allNavLinks={allNavLinks}
                   isActive={isActive}
-                  searchQuery=""
-                  setSearchQuery={() => {}}
                   onClose={() => setIsSidebarOpen(false)}
                 />
               </SheetContent>
@@ -151,7 +190,9 @@ function DashboardLayoutContent({
                 <div className="text-sm font-medium">
                   {session?.user?.company?.name || 'FixFlow'}
                 </div>
-                <div className="text-xs text-muted-foreground">{getRoleLabel(userRole)}</div>
+                <div className="text-xs text-muted-foreground">
+                  {getRoleLabel(userRole)}
+                </div>
               </div>
             </div>
           </div>
@@ -204,13 +245,16 @@ function DashboardLayoutContent({
             </DropdownMenu>
           </div>
         </div>
-      </div>
+      </header>
 
       {/* Desktop Sidebar */}
       <motion.aside
         variants={sidebarVariants}
         animate={isDesktopSidebarCollapsed ? "closed" : "open"}
-        className="hidden lg:flex flex-col glass backdrop-blur-xl border-r border-border/50 relative z-40"
+        className={cn(
+          "hidden lg:flex flex-col glass backdrop-blur-xl border-r border-border/50 relative z-40",
+          isMobile ? "hidden" : "block"
+        )}
       >
         <DesktopSidebar
           navConfig={navConfig}
@@ -224,29 +268,12 @@ function DashboardLayoutContent({
         />
       </motion.aside>
 
-      {/* Mobile Sidebar (inside Sheet) */}
-      <Sheet open={isSidebarOpen} onOpenChange={setIsSidebarOpen}>
-        <SheetTrigger asChild>
-          <Button variant="ghost" size="icon" className="lg:hidden h-9 w-9">
-            <Menu className="h-5 w-5" />
-          </Button>
-        </SheetTrigger>
-        <SheetContent side="left" className="lg:hidden w-80 glass backdrop-blur-xl p-0 border-border/50">
-          <MobileSidebar 
-            navConfig={navConfig} 
-            session={session} 
-            userRole={userRole}
-            allNavLinks={allNavLinks}
-            isActive={isActive}
-            searchQuery=""
-            setSearchQuery={() => {}}
-            onClose={() => setIsSidebarOpen(false)}
-          />
-        </SheetContent>
-      </Sheet>
-
       {/* Main Content */}
-      <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto min-h-screen mt-16">
+      <main 
+        className={cn(
+          "flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto min-h-screen mt-16"
+        )}
+      >
         <motion.div
           variants={contentVariants}
           initial="hidden"
@@ -259,7 +286,7 @@ function DashboardLayoutContent({
 
       {/* Trial Banner */}
       <TrialBanner />
-    </div>
+    </motion.div>
   );
 }
 
@@ -272,8 +299,10 @@ export default function DashboardClientLayout({
 }) {
   return (
     <ErrorBoundary>
-      <SessionProvider initialSession={session}>
-        <DashboardLayoutContent children={children} />
+      <SessionProvider> {/* Removed initialSession prop */}
+        <DashboardLayoutContent session={session}>
+          {children}
+        </DashboardLayoutContent>
       </SessionProvider>
     </ErrorBoundary>
   );

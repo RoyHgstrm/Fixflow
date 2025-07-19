@@ -4,7 +4,7 @@
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { usePageTitle } from '@/lib/hooks/use-page-title';
-import { api } from '@/trpc/react';
+import { trpc } from '@/trpc/react';
 import { DateRangePicker } from '@/components/ui/date-range-picker';
 import { subDays, format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
@@ -13,33 +13,9 @@ import { TrendingUp, Users, CalendarCheck, Clock, DollarSign, Briefcase, Chevron
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { WorkOrderType, CustomerType, WorkOrderPriority, InvoiceStatus } from '@/lib/types';
+import { WorkOrderType, CustomerType, WorkOrderPriority, InvoiceStatus, ReportsStats } from '@/lib/types';
 import Link from 'next/link';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-
-type ReportsStats = {
-  totalRevenue: number;
-  newCustomers: number;
-  completedWorkOrders: number;
-  pendingWorkOrders: number;
-  inProgressWorkOrders: number;
-  assignedWorkOrders: number;
-  cancelledWorkOrders: number;
-  averageCompletionTime: number;
-  revenueOverTime: { date: Date | null; revenue: number | null }[];
-  workOrdersByType: { type: WorkOrderType; count: number }[];
-  residentialCustomers: number;
-  commercialCustomers: number;
-  industrialCustomers: number;
-  topCustomersByRevenue: {
-    id: string;
-    name: string | null;
-    email: string | null;
-    totalRevenue: number;
-    workOrderCount: number;
-  }[];
-  workOrdersByPriority: { priority: WorkOrderPriority; count: number }[];
-};
 
 const cardVariants = {
   hidden: { opacity: 0, y: 50 },
@@ -68,7 +44,7 @@ export default function ReportsClientPage() {
   const [workOrderTypeFilter, setWorkOrderTypeFilter] = useState<WorkOrderType | 'all'>('all');
   const [customerTypeFilter, setCustomerTypeFilter] = useState<CustomerType | 'all'>('all');
   
-  const { data: stats, isLoading, refetch } = api.reports.getStats.useQuery<ReportsStats>({
+  const { data: stats, isLoading, refetch } = trpc.reports.getStats.useQuery<ReportsStats>({
     from: dateRange.from,
     to: dateRange.to,
     workOrderType: workOrderTypeFilter === 'all' ? undefined : workOrderTypeFilter,
@@ -140,7 +116,7 @@ export default function ReportsClientPage() {
 
       {isLoading ? (
         <div className="text-center py-10 text-muted-foreground">Loading reports...</div>
-      ) : (
+      ) : ( 
         <>
           <motion.div variants={containerVariants} className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
             {/* Metric Cards */}
@@ -152,7 +128,6 @@ export default function ReportsClientPage() {
                 </CardHeader>
                 <CardContent className="px-0 pb-0">
                   <div className="text-2xl font-bold text-gradient">{formatCurrency(stats?.totalRevenue)}</div>
-                  <p className="text-xs text-muted-foreground">+20.1% from last month</p>
                 </CardContent>
               </Card>
             </motion.div>
@@ -165,7 +140,6 @@ export default function ReportsClientPage() {
                 </CardHeader>
                 <CardContent className="px-0 pb-0">
                   <div className="text-2xl font-bold">+{stats?.newCustomers}</div>
-                  <p className="text-xs text-muted-foreground">+18.0% from last month</p>
                 </CardContent>
               </Card>
             </motion.div>
@@ -178,7 +152,6 @@ export default function ReportsClientPage() {
                 </CardHeader>
                 <CardContent className="px-0 pb-0">
                   <div className="text-2xl font-bold">{stats?.completedWorkOrders}</div>
-                  <p className="text-xs text-muted-foreground">+12.5% from last month</p>
                 </CardContent>
               </Card>
             </motion.div>
@@ -191,7 +164,6 @@ export default function ReportsClientPage() {
                 </CardHeader>
                 <CardContent className="px-0 pb-0">
                   <div className="text-2xl font-bold">{formatDays(stats?.averageCompletionTime)}</div>
-                  <p className="text-xs text-muted-foreground">-5% from last month</p>
                 </CardContent>
               </Card>
             </motion.div>
@@ -207,7 +179,10 @@ export default function ReportsClientPage() {
                 <CardContent className="px-0 pb-0">
                   <ResponsiveContainer width="100%" height={300}>
                     <LineChart
-                      data={stats?.revenueOverTime?.map(d => ({ ...d, date: format(new Date(d.date), 'MMM dd') }))}
+                      data={stats?.revenueOverTime?.map((d: { date: Date | null; revenue: number | null }) => ({
+                        ...d,
+                        date: d.date ? format(new Date(d.date), 'MMM dd') : 'N/A'
+                      }))}
                       margin={{ top: 5, right: 10, left: 10, bottom: 5 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke="#3b3b3b" />
@@ -358,11 +333,11 @@ export default function ReportsClientPage() {
                 <CardContent className="px-0 pb-0">
                   {stats?.topCustomersByRevenue && stats.topCustomersByRevenue.length > 0 ? (
                     <div className="space-y-4">
-                      {stats.topCustomersByRevenue.map((customer, index) => (
+                      {stats.topCustomersByRevenue.map((customer: ReportsStats['topCustomersByRevenue'][number], index: number) => (
                         <div key={customer.id} className="flex items-center justify-between py-2 border-b border-border/30 last:border-b-0">
                           <div className="flex items-center gap-3">
                             <Avatar className="h-8 w-8">
-                              <AvatarFallback className="bg-primary/20 text-primary">{customer.name[0]}</AvatarFallback>
+                              <AvatarFallback className="bg-primary/20 text-primary">{customer.name?.[0] ?? ''}</AvatarFallback>
                             </Avatar>
                             <div>
                               <p className="font-medium">{customer.name}</p>

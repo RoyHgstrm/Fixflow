@@ -26,12 +26,12 @@ export const reportsRouter = createTRPCRouter({
 
       // 1. Total Revenue
       const totalRevenueResult = await db.invoice.aggregate({
-        where: { 
-          companyId, 
-          status: InvoiceStatus.PAID, 
-          paidDate: dateFilter, 
-          workOrder: workOrderType ? { type: workOrderType } : undefined,
-          customer: customerType ? { type: customerType } : undefined,
+        where: {
+          companyId,
+          status: InvoiceStatus.PAID,
+          paidDate: dateFilter,
+          workOrder: (workOrderType != null) ? { type: workOrderType } : undefined,
+          customer: (customerType != null) ? { type: customerType } : undefined,
         },
         _sum: { total: true },
       });
@@ -39,33 +39,33 @@ export const reportsRouter = createTRPCRouter({
 
       // 2. New Customers
       const newCustomers = await db.customer.count({
-        where: { companyId, createdAt: dateFilter, type: customerType || undefined },
+        where: { companyId, createdAt: dateFilter, type: (customerType != null) || undefined },
       });
 
       // 3. Work Order Stats
       const completedWorkOrders = await db.workOrder.count({
-        where: { companyId, status: 'COMPLETED', completedDate: dateFilter, type: workOrderType || undefined, customer: customerType ? { type: customerType } : undefined },
+        where: { companyId, status: 'COMPLETED', completedDate: dateFilter, type: (workOrderType != null) || undefined, customer: (customerType != null) ? { type: customerType } : undefined },
       });
 
       const pendingWorkOrders = await db.workOrder.count({
-        where: { companyId, status: 'PENDING', type: workOrderType || undefined, customer: customerType ? { type: customerType } : undefined },
+        where: { companyId, status: 'PENDING', type: (workOrderType != null) || undefined, customer: (customerType != null) ? { type: customerType } : undefined },
       });
-      
+
       const inProgressWorkOrders = await db.workOrder.count({
-        where: { companyId, status: 'IN_PROGRESS', type: workOrderType || undefined, customer: customerType ? { type: customerType } : undefined },
+        where: { companyId, status: 'IN_PROGRESS', type: (workOrderType != null) || undefined, customer: (customerType != null) ? { type: customerType } : undefined },
       });
 
       const assignedWorkOrders = await db.workOrder.count({
-        where: { companyId, status: 'ASSIGNED', type: workOrderType || undefined, customer: customerType ? { type: customerType } : undefined },
+        where: { companyId, status: 'ASSIGNED', type: (workOrderType != null) || undefined, customer: (customerType != null) ? { type: customerType } : undefined },
       });
 
       const cancelledWorkOrders = await db.workOrder.count({
-        where: { companyId, status: 'CANCELLED', type: workOrderType || undefined, customer: customerType ? { type: customerType } : undefined },
+        where: { companyId, status: 'CANCELLED', type: (workOrderType != null) || undefined, customer: (customerType != null) ? { type: customerType } : undefined },
       });
 
       // 4. Average Completion Time (simple calculation for now)
       const workOrdersForAvgTime = await db.workOrder.findMany({
-        where: { companyId, status: 'COMPLETED', completedDate: dateFilter, type: workOrderType || undefined, customer: customerType ? { type: customerType } : undefined },
+        where: { companyId, status: 'COMPLETED', completedDate: dateFilter, type: (workOrderType != null) || undefined, customer: (customerType != null) ? { type: customerType } : undefined },
         select: { createdAt: true, completedDate: true },
       });
 
@@ -76,14 +76,14 @@ export const reportsRouter = createTRPCRouter({
         return sum;
       }, 0);
 
-      const averageCompletionTime = workOrdersForAvgTime.length > 0 
+      const averageCompletionTime = workOrdersForAvgTime.length > 0
         ? totalCompletionTimeMillis / workOrdersForAvgTime.length / (1000 * 60 * 60 * 24) // Convert to days
         : 0;
 
       // 5. Revenue Over Time
       const revenueOverTime = await db.invoice.groupBy({
         by: ['paidDate'],
-        where: { companyId, status: InvoiceStatus.PAID, paidDate: dateFilter, workOrder: workOrderType ? { type: workOrderType } : undefined, customer: customerType ? { type: customerType } : undefined },
+        where: { companyId, status: InvoiceStatus.PAID, paidDate: dateFilter, workOrder: (workOrderType != null) ? { type: workOrderType } : undefined, customer: (customerType != null) ? { type: customerType } : undefined },
         _sum: { total: true },
         orderBy: { paidDate: 'asc' },
       });
@@ -91,14 +91,14 @@ export const reportsRouter = createTRPCRouter({
       // 6. Work Orders by Type
       const workOrdersByType = await db.workOrder.groupBy({
         by: ['type'],
-        where: { companyId, createdAt: dateFilter, type: workOrderType || undefined, customer: customerType ? { type: customerType } : undefined },
+        where: { companyId, createdAt: dateFilter, type: (workOrderType != null) || undefined, customer: (customerType != null) ? { type: customerType } : undefined },
         _count: { id: true },
       });
 
       // 7. Customer Breakdown by Type
       const customerBreakdown = await db.customer.groupBy({
         by: ['type'],
-        where: { companyId, createdAt: dateFilter, type: customerType || undefined },
+        where: { companyId, createdAt: dateFilter, type: (customerType != null) || undefined },
         _count: { id: true },
       });
 
@@ -114,7 +114,7 @@ export const reportsRouter = createTRPCRouter({
             some: {
               status: InvoiceStatus.PAID,
               paidDate: dateFilter,
-              workOrder: workOrderType ? { type: workOrderType } : undefined,
+              workOrder: (workOrderType != null) ? { type: workOrderType } : undefined,
             },
           },
         },
@@ -126,7 +126,7 @@ export const reportsRouter = createTRPCRouter({
             select: { workOrders: true },
           },
           invoices: {
-            where: { status: InvoiceStatus.PAID, paidDate: dateFilter, workOrder: workOrderType ? { type: workOrderType } : undefined },
+            where: { status: InvoiceStatus.PAID, paidDate: dateFilter, workOrder: (workOrderType != null) ? { type: workOrderType } : undefined },
             select: { total: true },
           },
         },
@@ -151,7 +151,7 @@ export const reportsRouter = createTRPCRouter({
       // 9. Work Orders by Priority
       const workOrdersByPriority = await db.workOrder.groupBy({
         by: ['priority'],
-        where: { companyId, createdAt: dateFilter, type: workOrderType || undefined, customer: customerType ? { type: customerType } : undefined },
+        where: { companyId, createdAt: dateFilter, type: (workOrderType != null) || undefined, customer: (customerType != null) ? { type: customerType } : undefined },
         _count: { id: true },
       });
 

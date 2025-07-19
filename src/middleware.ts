@@ -1,62 +1,83 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { Database } from '@/lib/database.types';
+import { createServerSupabaseClient, handleSupabaseRateLimit } from '@/lib/supabase/server';
 
 export async function middleware(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({
-    request,
-  });
-
-  const supabase = createServerClient<Database>(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get: (name: string) => request.cookies.get(name)?.value,
-        set: (name: string, value: string, options: CookieOptions) => {
-          supabaseResponse.cookies.set(name, value, options);
-        },
-        remove: (name: string, options: CookieOptions) => {
-          supabaseResponse.cookies.set(name, '', { ...options, maxAge: 0 });
-        },
-      },
-    }
-  );
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
+  const supabase = await createServerSupabaseClient();
   const { pathname } = request.nextUrl;
 
-  // Redirect unauthenticated users from protected routes to the login page
-  if (!user && pathname.startsWith('/dashboard')) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/login';
-    return NextResponse.redirect(url);
+  // Public routes that don't require authentication
+  const publicRoutes = [
+    '/login', 
+    '/signup', 
+    '/forgot-password', 
+    '/reset-password', 
+    '/unauthorized', 
+    '/privacy', 
+    '/terms'
+  ];
+
+  // Check if the route is public
+  const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
+
+  // Fetch the session
+  const { data: { session }, error } = await supabase.auth.getSession();
+
+  // Handle rate-limited requests
+  if (error?.status === 429) {
+    return NextResponse.json(
+      { error: 'Too many requests. Please try again later.' }, 
+      { status: 429 }
+    );
   }
 
-  // Redirect authenticated users from public auth pages to the dashboard
-  if (user && (pathname.startsWith('/login') || pathname.startsWith('/signup'))) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/dashboard';
-    return NextResponse.redirect(url);
+  // Redirect logic for authenticated routes
+  if (!isPublicRoute) {
+    if (!session) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+
+    // Optional: Role-based access control
+    const userRole = session.user.user_metadata?.role;
+    const restrictedRoutes = {
+      EMPLOYEE: ['/dashboard/billing', '/dashboard/team'],
+      CLIENT: ['/dashboard/team', '/dashboard/work-orders', '/dashboard/customers'],
+    };
+
+    if (userRole && restrictedRoutes[userRole as keyof typeof restrictedRoutes]) {
+      const restrictedRoutePrefixes = restrictedRoutes[userRole as keyof typeof restrictedRoutes];
+      if (restrictedRoutePrefixes.some(route => pathname.startsWith(route))) {
+        return NextResponse.redirect(new URL('/unauthorized', request.url));
+      }
+    }
   }
 
-  return supabaseResponse;
+  // Handle rate-limited requests for specific routes
+  const rateControlledRoutes = [
+    '/api/auth', 
+    '/api/trpc', 
+    '/dashboard/api'
+  ];
+
+  if (rateControlledRoutes.some(route => pathname.startsWith(route))) {
+    try {
+      return await handleSupabaseRateLimit(request, async () => {
+        // Your original request handling logic
+        return NextResponse.next();
+      });
+    } catch (error) {
+      return NextResponse.json(
+        { error: 'Request failed due to rate limiting' }, 
+        { status: 429 }
+      );
+    }
+  }
+
+  return NextResponse.next();
 }
 
 export const config = {
   matcher: [
-    /*
-     *
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * Feel free to modify this pattern to include more paths.
-     */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*))',
+    '/((?!_next/static|_next/image|favicon.ico|logo.svg|manifest.json).*)',
   ],
 }; 

@@ -11,6 +11,7 @@ import { ErrorBoundary } from '@/components/ui/error-boundary';
 import { TRPCReactProvider } from '@/trpc/react';
 import Footer from '@/app/_components/footer';
 import Header from '@/app/_components/navbar';
+import { auth } from '@/server/auth';
 
 const inter = Inter({ 
   subsets: ['latin'], 
@@ -71,7 +72,7 @@ export default async function RootLayout({
   const supabase = await createServerSupabaseClient();
 
   // Fetch the session
-  const { data: { session } } = await supabase.auth.getSession();
+  const session = await auth();
 
   return (
     <html lang="en" className={`${geist.variable}`}>

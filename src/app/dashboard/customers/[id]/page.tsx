@@ -1,28 +1,33 @@
-'use client';
-
-import { useSession } from "@/lib/providers/session-provider";
 import { CustomerDetailClient } from "./CustomerDetailClient";
-import { redirect } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { auth } from "@/server/auth";
+import { redirect } from "next/navigation";
+import { type Metadata, type ResolvingMetadata } from 'next';
+import { CustomSession } from '@/lib/types';
 
-export default function CustomerDetailPage({
+interface PageProps {
+  params: { id: string };
+}
+
+export async function generateMetadata(
+  { params }: { params: { id: string } },
+  parent: ResolvingMetadata
+): Promise<Metadata> {
+  const id = params.id;
+  return {
+    title: `Customer ${id}`,
+  };
+}
+
+export default async function CustomerDetailPage({
   params
-}: {
-  params: { id: string }
-}) {
-  const { session } = useSession();
+}: PageProps) {
+  const session = await auth();
 
-  if (!session?.user) {
-    redirect("/login");
+  if (!session) {
+    redirect('/login');
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: [0.6, -0.05, 0.01, 0.99] }}
-    >
-      <CustomerDetailClient customerId={params.id} session={session} />
-    </motion.div>
+    <CustomerDetailClient customerId={params.id} session={session as CustomSession} />
   );
 }

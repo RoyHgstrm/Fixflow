@@ -21,7 +21,7 @@ FixFlow is built with a modern, type-safe, and performant technology stack:
 *   **Framework:** [Next.js 14 (App Router)](https://nextjs.org/)
 *   **Language:** [TypeScript](https://www.typescriptlang.org/)
 *   **Styling:** [Tailwind CSS](https://tailwindcss.com/) + CSS Modules
-*   **UI Components:** [Radix UI](https://www.radix-ui.com/) primitives (likely via Shadcn/UI)
+*   **UI Components:** [Shadcn/UI](https://ui.shadcn.com/) (built on [Radix UI](https://www.radix-ui.com/) primitives)
 *   **Animation:** [Framer Motion](https://www.framer.com/motion/)
 *   **State Management:** React Context + `useReducer` (for global state)
 *   **Data Fetching:** [@tanstack/react-query](https://tanstack.com/query/latest)

@@ -1,9 +1,8 @@
 import { createBrowserClient } from '@supabase/ssr';
-import { Database } from '../database.types';
-import { UserRole } from '../types';
+import { type UserRole } from '@/lib/types';
 
 export const createClientSupabaseClient = () => 
-  createBrowserClient<Database>(
+  createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
@@ -12,23 +11,70 @@ export const useAuthStateListener = (
   onAuthStateChange: (session: { user: any; role?: UserRole } | null) => void
 ) => {
   const supabase = createClientSupabaseClient();
-
+  
   const { data: { subscription } } = supabase.auth.onAuthStateChange(
-    async (event, session) => {
-      let userRole: UserRole | undefined = undefined;
-
-      if (session?.user?.id) {
-        // Fetch user role from your database if needed, or from session metadata
-        userRole = session.user.user_metadata?.role as UserRole;
+    (event, session) => {
+      if (event === 'SIGNED_OUT') {
+        onAuthStateChange(null);
+      } else if (session?.user) {
+        onAuthStateChange({ 
+          user: session.user, 
+          role: session.user.user_metadata?.role 
+        });
       }
-      onAuthStateChange(session ? { user: session.user, role: userRole } : null);
     }
   );
 
-  return () => subscription.unsubscribe();
+  return () => {
+    subscription.unsubscribe();
+  };
 };
 
 export const signOut = async () => {
   const supabase = createClientSupabaseClient();
-  await supabase.auth.signOut();
+
+  try {
+    // Revoke all refresh tokens for the user
+    const { data: { user }, error: getUserError } = await supabase.auth.getUser();
+    
+    if (getUserError || !user) {
+      console.error('Failed to get current user:', getUserError);
+      throw getUserError;
+    }
+
+    // Call a custom Postgres function to delete all user sessions
+    const { error: rpcError } = await supabase.rpc('delete_user_sessions', { 
+      user_id: user.id 
+    });
+
+    if (rpcError) {
+      console.error('Failed to delete user sessions:', rpcError);
+    }
+
+    // Sign out from Supabase
+    const { error: signOutError } = await supabase.auth.signOut({
+      scope: 'global' // Sign out from all devices
+    });
+
+    if (signOutError) {
+      console.error('Supabase sign out error:', signOutError);
+      throw signOutError;
+    }
+
+    // Clear local storage and cookies
+    localStorage.clear();
+    document.cookie.split(";").forEach((c) => {
+      document.cookie = c
+        .replace(/^ +/, "")
+        .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('Logout failed:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Logout failed' 
+    };
+  }
 }; 

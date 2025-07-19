@@ -1,9 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { BaseMap } from './map';
-import { geocodeAddress } from './map';
-import { toast } from 'sonner';
+import { BaseMap, MapContainer } from './map'; // Import MapContainer
 
 interface CustomerMapWrapperProps {
   customers: Array<{
@@ -12,12 +10,12 @@ interface CustomerMapWrapperProps {
     address?: string;
     latitude?: number;
     longitude?: number;
+    type?: 'customer' | 'work_order';
   }>;
   height?: string;
-  showStats?: boolean;
 }
 
-export function CustomerMap({ customers, height, showStats }: CustomerMapWrapperProps) {
+export function CustomerMap({ customers, height }: CustomerMapWrapperProps) {
   const validCoordinates = customers
     .filter(customer => customer.latitude != null && customer.longitude != null)
     .map(customer => ({ 
@@ -26,7 +24,7 @@ export function CustomerMap({ customers, height, showStats }: CustomerMapWrapper
       address: customer.address,
       latitude: customer.latitude!,
       longitude: customer.longitude!,
-      type: 'customer' as const,
+      type: customer.type || 'customer',
     }));
 
   if (validCoordinates.length === 0) {
@@ -37,5 +35,9 @@ export function CustomerMap({ customers, height, showStats }: CustomerMapWrapper
     );
   }
 
-  return <BaseMap locations={validCoordinates} height={height} showStats={showStats} />;
+  return (
+    <MapContainer style={height ? { height } : undefined}> {/* Pass height via style */}
+      <BaseMap locations={validCoordinates} /> {/* BaseMap only needs locations */}
+    </MapContainer>
+  );
 } 

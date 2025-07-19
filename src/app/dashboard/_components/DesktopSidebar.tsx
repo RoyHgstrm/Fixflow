@@ -1,16 +1,16 @@
-"use client";
+/* eslint-disable @typescript-eslint/strict-boolean-expressions */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from "react";
-import { UserRole } from "@/lib/types";
+import { type UserRole, USER_ROLES, CustomSession } from "@/lib/types";
 import { ChevronLeft, ChevronRight, Search, LogOut, LayoutDashboard, Settings } from 'lucide-react';
 import { iconMap, NavLink, NavConfig } from '@/lib/navigation-utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { getRoleLabel } from '@/lib/navigation-utils';
-import { CustomSession } from '@/lib/providers/session-provider';
 import { signOut } from '@/lib/supabase/client';
 
 type DesktopSidebarProps = {
@@ -43,7 +43,7 @@ export default function DesktopSidebar({
   return (
     <div
       className={`
-        fixed left-0 top-0 h-full shadow-lg transition-all duration-300 hidden md:block bg-base-100
+        fixed left-0 top-0 h-full shadow-lg transition-all duration-300 hidden md:block bg-base-100 pt-18
         ${isCollapsed ? "w-16" : "w-64"} 
       `}
     >
@@ -52,12 +52,7 @@ export default function DesktopSidebar({
           {!isCollapsed && (
             <h2 className="text-xl font-bold text-white">{navConfig.title}</h2>
           )}
-          <button
-            onClick={onToggleCollapse}
-            className="text-gray-400 transition-colors hover:text-white"
-          >
-            {isCollapsed ? <ChevronRight /> : <ChevronLeft />}
-          </button>
+
         </div>
 
         <div className="p-4">
@@ -68,7 +63,7 @@ export default function DesktopSidebar({
               placeholder="Search navigation..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="glass bg-muted/20 w-full rounded-lg border border-border/50 py-2 pl-10 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="glass bg-muted/20 w-full rounded-lg border border-border/50 py-2 pl-10 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20" 
             />
           </div>
         </div>
@@ -117,7 +112,7 @@ export default function DesktopSidebar({
                         {session?.user?.name ?? session?.user?.email}
                       </div>
                       <div className="capitalize text-muted-foreground text-xs">
-                        {getRoleLabel(session.user.role as UserRole)}
+                        {getRoleLabel(session.user.role as UserRole)} {/* Cast to UserRole */}
                       </div>
                     </div>
                   )}
@@ -129,8 +124,8 @@ export default function DesktopSidebar({
                     <span className="text-sm font-medium">
                       {session?.user?.name ?? session?.user?.email}
                     </span>
-                    <span className="text-muted-foreground text-xs">
-                      {getRoleLabel(session.user.role as UserRole)}
+                    <span className="text-xs leading-none text-muted-foreground">
+                      {getRoleLabel(session.user.role as UserRole)} {/* Cast to UserRole */}
                     </span>
                   </div>
                 </DropdownMenuLabel>
@@ -149,7 +144,11 @@ export default function DesktopSidebar({
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  onClick={handleSignOut}
+                  onClick={async (event) => {
+                    event.preventDefault(); // Prevent default link behavior
+                    await handleSignOut();
+                    window.location.href = '/login'; // Force a full page reload to the login page
+                  }}
                   className="cursor-pointer text-destructive focus:text-destructive"
                 >
                   <LogOut className="mr-2 h-4 w-4" />

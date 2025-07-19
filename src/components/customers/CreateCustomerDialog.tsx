@@ -24,33 +24,26 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import type { CustomerType } from '@/lib/types';
-import { api } from "@/trpc/react";
+import { CustomerType } from '@/lib/types';
+import { trpc } from "@/trpc/react";
+import { useToast } from '@/components/ui/use-toast';
 
 // Form validation schema
 const createCustomerSchema = z.object({
-  name: z.string().min(1, 'Customer name is required'),
-  email: z.string().email('Valid email is required').optional().or(z.literal('')),
-  phone: z.string().optional(),
-  address: z.string().optional(),
-  city: z.string().optional(),
-  state: z.string().optional(),
-  zipCode: z.string().optional(),
-  type: z.enum(['RESIDENTIAL', 'COMMERCIAL', 'INDUSTRIAL']),
-  notes: z.string().optional(),
+  name: z.string().min(1, 'Name is required'),
+  type: z.nativeEnum(CustomerType),
+  email: z.string().email('Invalid email address').optional().nullable(),
+  phone: z.string().optional().nullable(),
+  address: z.string().optional().nullable(),
+  city: z.string().optional().nullable(),
+  state: z.string().optional().nullable(),
+  zipCode: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+  latitude: z.number().optional().nullable(),
+  longitude: z.number().optional().nullable(),
 });
 
-type CreateCustomerForm = {
-  name: string;
-  type: 'RESIDENTIAL' | 'COMMERCIAL' | 'INDUSTRIAL';
-  email?: string;
-  phone?: string;
-  address?: string;
-  city?: string;
-  state?: string;
-  zipCode?: string;
-  notes?: string;
-};
+type CreateCustomerForm = z.infer<typeof createCustomerSchema>;
 
 interface CreateCustomerDialogProps {
   isOpen: boolean;
@@ -64,54 +57,100 @@ export default function CreateCustomerDialog({
   onSuccess
 }: CreateCustomerDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { toast } = useToast();
 
   const form = useForm<CreateCustomerForm>({
     resolver: zodResolver(createCustomerSchema),
     defaultValues: {
-      name: '',
-      email: '',
-      phone: '',
-      address: '',
-      city: '',
-      state: '',
-      zipCode: '',
-      type: 'RESIDENTIAL' as const,
-      notes: '',
+      type: CustomerType.RESIDENTIAL,
     },
   });
 
-  const createCustomerMutation = api.customer.create.useMutation({
-    onSuccess: () => {
+  const createCustomerMutation = trpc.customer.create.useMutation({
+    onSuccess: (newCustomer) => {
+      toast({
+        title: "Success!",
+        description: `Customer "${newCustomer.name}" created successfully!`,
+        type: "success",
+      });
       form.reset();
-      onSuccess?.();
       onClose();
+      onSuccess?.();
     },
     onError: (error) => {
-      console.error('Failed to create customer:', error);
+      toast({
+        title: "Error",
+        description: `Failed to create customer: ${error.message}`,
+        variant: "destructive",
+        type: "destructive",
+      });
+      setIsSubmitting(false);
     },
   });
 
   const onSubmit = async (data: CreateCustomerForm) => {
     setIsSubmitting(true);
-    try {
-      // Clean up empty strings to undefined for optional fields
-      const cleanData = {
-        ...data,
-        email: data.email || undefined,
-        phone: data.phone || undefined,
-        address: data.address || undefined,
-        city: data.city || undefined,
-        state: data.state || undefined,
-        zipCode: data.zipCode || undefined,
-        notes: data.notes || undefined,
-      };
-      
-      await createCustomerMutation.mutateAsync(cleanData);
-    } catch (error) {
-      console.error('Error creating customer:', error);
-    } finally {
-      setIsSubmitting(false);
+    let newLatitude = data.latitude;
+    let newLongitude = data.longitude;
+
+    const fullAddress = [
+      data.address,
+      data.city,
+      data.state,
+      data.zipCode
+    ].filter(Boolean).join(', ');
+
+    if (fullAddress) {
+      try {
+        const response = await fetch('/api/geocode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address: fullAddress }),
+        });
+
+        if (response.ok) {
+          const geoData = await response.json();
+          if (geoData.coordinates) {
+            newLatitude = geoData.coordinates.lat;
+            newLongitude = geoData.coordinates.lon;
+          } else {
+            toast({
+              title: "Geocoding Warning",
+              description: "Could not geocode the address. Customer created without coordinates.",
+              type: "warning",
+            });
+          }
+        } else {
+          const errorData = await response.json();
+          toast({
+            title: "Geocoding Error",
+            description: `Geocoding failed: ${errorData.error || response.statusText}. Customer created without coordinates.`,
+            type: "destructive",
+          });
+        }
+      } catch (error) {
+        console.error("Geocoding API call failed:", error);
+        toast({
+          title: "Geocoding Error",
+          description: "Failed to connect to geocoding service. Customer created without coordinates.",
+          type: "destructive",
+        });
+      }
     }
+
+    createCustomerMutation.mutate({
+      name: data.name,
+      type: data.type,
+      email: data.email,
+      phone: data.phone,
+      address: data.address,
+      city: data.city,
+      state: data.state,
+      zipCode: data.zipCode,
+      notes: data.notes,
+      latitude: newLatitude,
+      longitude: newLongitude,
+    });
   };
 
   const handleClose = () => {
@@ -119,16 +158,16 @@ export default function CreateCustomerDialog({
     onClose();
   };
 
-  const getTypeIcon = (type: string) => {
+  const getTypeIcon = (type: CustomerType) => {
     switch (type) {
-    case 'RESIDENTIAL':
-      return Home;
-    case 'COMMERCIAL':
-      return Building2;
-    case 'INDUSTRIAL':
-      return Factory;
-    default:
-      return User;
+      case CustomerType.RESIDENTIAL:
+        return Home;
+      case CustomerType.COMMERCIAL:
+        return Building2;
+      case CustomerType.INDUSTRIAL:
+        return Factory;
+      default:
+        return User;
     }
   };
 
@@ -182,19 +221,19 @@ export default function CreateCustomerDialog({
                     <SelectValue placeholder="Select customer type" />
                   </SelectTrigger>
                   <SelectContent className="glass backdrop-blur-xl">
-                    <SelectItem value="RESIDENTIAL">
+                    <SelectItem value={CustomerType.RESIDENTIAL}>
                       <div className="flex items-center gap-2">
                         <Home className="w-4 h-4" />
                         Residential
                       </div>
                     </SelectItem>
-                    <SelectItem value="COMMERCIAL">
+                    <SelectItem value={CustomerType.COMMERCIAL}>
                       <div className="flex items-center gap-2">
                         <Building2 className="w-4 h-4" />
                         Commercial
                       </div>
                     </SelectItem>
-                    <SelectItem value="INDUSTRIAL">
+                    <SelectItem value={CustomerType.INDUSTRIAL}>
                       <div className="flex items-center gap-2">
                         <Factory className="w-4 h-4" />
                         Industrial

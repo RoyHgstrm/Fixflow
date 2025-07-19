@@ -2,25 +2,38 @@
 
 import { useState, type ReactElement } from 'react';
 import { useSession } from '@/lib/providers/session-provider';
-import { api } from '@/trpc/react';
+import { trpc } from '@/trpc/react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   PlanType,
+  SubscriptionStatus,
+  InvoiceStatus
+} from '@prisma/client';
+import {
   CompanyWithSubscription,
   PaymentMethod,
   Invoice,
-  SubscriptionStatus,
-  InvoiceStatus
+  PlanFeatures
 } from '@/lib/types';
 import { PLAN_CONFIGS } from '@/lib/constants';
 import { getTrialDaysRemaining, isTrialEndingSoon, formatTrialEndDate } from '@/lib/utils';
-import { User, Users, Building2, Crown, CheckCircle2, ArrowRight, Wallet, ReceiptText, CircleDollarSign, CalendarDays } from 'lucide-react';
+import { User, Users, Building2, Crown, CheckCircle2, ArrowRight, Wallet, ReceiptText, CircleDollarSign, CalendarDays, MoreVertical, PlusCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import * as React from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
+import { useToast } from '@/components/ui/use-toast'; // Added useToast import
 
 const itemVariants = {
   hidden: { opacity: 0, y: 20 },
@@ -43,15 +56,16 @@ export default function BillingPage() {
   const [selectedPlan, setSelectedPlan] = useState<PlanType | null>(null);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [isUpgrading, setIsUpgrading] = useState(false);
+  const { toast } = useToast(); // Initialize useToast
 
   // Fetch company subscription data
-  const { data: companyData, isLoading: companyLoading } = api.company.getSubscription.useQuery();
+  const { data: companyData, isLoading: companyLoading } = trpc.company.getSubscription.useQuery();
   
   // Fetch payment methods
-  const { data: paymentMethods, isLoading: paymentMethodsLoading } = api.billing.getPaymentMethods.useQuery();
+  const { data: paymentMethods, isLoading: paymentMethodsLoading } = trpc.billing.getPaymentMethods.useQuery();
   
   // Fetch invoices
-  const { data: invoicesData, isLoading: invoicesLoading } = api.billing.getInvoices.useQuery();
+  const { data: invoicesData, isLoading: invoicesLoading } = trpc.billing.getInvoices.useQuery<Invoice[]>();
 
   // Loading state
   if (companyLoading || paymentMethodsLoading || invoicesLoading) {
@@ -66,7 +80,7 @@ export default function BillingPage() {
     isActive: true,
   };
 
-  const currentPlan = PLAN_CONFIGS[company.planType as keyof typeof PLAN_CONFIGS];
+  const currentPlan: PlanFeatures = PLAN_CONFIGS[company.planType as keyof typeof PLAN_CONFIGS];
   const daysRemaining = getTrialDaysRemaining(company.trialEndDate);
   const isOnTrial = company.subscriptionStatus === SubscriptionStatus.TRIAL;
   const trialEndingSoon = isTrialEndingSoon(company.trialEndDate);
@@ -81,21 +95,33 @@ export default function BillingPage() {
     
     try {
       // Upgrade plan
-      if (selectedPlan) {
-        // @ts-ignore - This is a known tRPC issue, mutateAsync exists at runtime
-        const result = await api.billing.upgradePlan.mutateAsync({ planType: selectedPlan });
+      if (selectedPlan != null) {
+        // @ts-ignore: mutateAsync type issue, assuming underlying functionality is correct.
+        const result: { success: boolean; message?: string } = await trpc.billing.upgradePlan.mutateAsync({ planType: selectedPlan });
         
         if (result.success) {
           setShowPaymentForm(false);
           setSelectedPlan(null);
-          toast.success("Plan upgraded successfully!");
+          toast({
+            title: "Plan Upgraded!",
+            description: "Your plan has been successfully upgraded.",
+            type: "success",
+          });
         } else {
-          toast.error(`Failed to upgrade plan: ${result.message}`);
+          toast({
+            title: "Upgrade Failed",
+            description: `Failed to upgrade plan: ${result.message}`,
+            type: "destructive",
+          });
           console.error('Payment failed:', result.message);
         }
       }
     } catch (error: any) {
-      toast.error(`Failed to upgrade plan: ${error.message}`);
+      toast({
+        title: "Upgrade Error",
+        description: `Failed to upgrade plan: ${error.message}`,
+        type: "destructive",
+      });
       console.error('Payment failed:', error);
     } finally {
       setIsUpgrading(false);
@@ -119,34 +145,34 @@ export default function BillingPage() {
 
   const getSubscriptionStatusBadge = (status: SubscriptionStatus) => {
     switch (status) {
-      case SubscriptionStatus.TRIAL:
-        return <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/20 px-3 py-1 rounded-full flex items-center gap-1.5">
-          <CalendarDays className="w-4 h-4" /> Trial
-        </Badge>;
-      case SubscriptionStatus.ACTIVE:
-        return <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 200 }}>
-          <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20 px-3 py-1 rounded-full">
-            <CheckCircle2 className="w-4 h-4 mr-1.5" /> Active
-          </Badge>
-        </motion.div>;
-      case SubscriptionStatus.PAST_DUE:
-        return <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20">Past Due</Badge>;
-      case SubscriptionStatus.CANCELLED:
-        return <Badge variant="outline" className="bg-red-500/10 text-red-500 border-red-500/20">Cancelled</Badge>;
-      case SubscriptionStatus.EXPIRED:
-        return <Badge variant="outline" className="bg-gray-500/10 text-gray-500 border-gray-500/20">Expired</Badge>;
-      default:
-        return <Badge variant="outline">Unknown</Badge>;
+    case SubscriptionStatus.TRIAL:
+      return <Badge className="bg-blue-500/10 text-blue-500 border-blue-500/20 px-3 py-1 rounded-full flex items-center gap-1.5">
+        <CalendarDays className="w-4 h-4" /> Trial
+      </Badge>;
+    case SubscriptionStatus.ACTIVE:
+      return <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 200 }}>
+        <Badge className="bg-green-500/10 text-green-500 border-green-500/20 px-3 py-1 rounded-full">
+          <CheckCircle2 className="w-4 h-4 mr-1.5" /> Active
+        </Badge>
+      </motion.div>;
+    case SubscriptionStatus.PAST_DUE:
+      return <Badge className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20">Past Due</Badge>;
+    case SubscriptionStatus.CANCELLED:
+      return <Badge className="bg-red-500/10 text-red-500 border-red-500/20">Cancelled</Badge>;
+    case SubscriptionStatus.EXPIRED:
+      return <Badge className="bg-gray-500/10 text-gray-500 border-gray-500/20">Expired</Badge>;
+    default:
+      return <Badge>Unknown</Badge>;
     }
   };
 
   const getInvoiceStatusBadgeClass = (status: InvoiceStatus) => {
     switch (status) {
-      case InvoiceStatus.PAID: return 'bg-green-500/10 text-green-500 border-green-500/20';
-      case InvoiceStatus.PENDING: return 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20';
-      case InvoiceStatus.OVERDUE: return 'bg-red-500/10 text-red-500 border-red-500/20';
-      case InvoiceStatus.DRAFT: return 'bg-gray-500/10 text-gray-500 border-gray-500/20';
-      default: return 'bg-gray-500/10 text-gray-500 border-gray-500/20';
+    case InvoiceStatus.PAID: return 'bg-green-500/10 text-green-500 border-green-500/20';
+    case InvoiceStatus.PENDING: return 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20';
+    case InvoiceStatus.OVERDUE: return 'bg-red-500/10 text-red-500 border-red-500/20';
+    case InvoiceStatus.DRAFT: return 'bg-gray-500/10 text-gray-500 border-gray-500/20';
+    default: return 'bg-gray-500/10 text-gray-500 border-gray-500/20';
     }
   };
 
@@ -220,7 +246,9 @@ export default function BillingPage() {
               <Wallet className="w-6 h-6 text-primary" />
               Payment Methods
             </CardTitle>
-            <Button variant="outline" size="sm">Add New</Button>
+            <Button variant="outline" size="sm" onClick={() => setShowPaymentForm(true)}>
+              <PlusCircle className="w-4 h-4 mr-2" /> Add New
+            </Button>
           </CardHeader>
           <CardContent className="px-0 pb-0">
             {paymentMethods?.length ? (
@@ -244,11 +272,40 @@ export default function BillingPage() {
                         <ReceiptText className="w-6 h-6 text-muted-foreground" />
                       )}
                       <div>
-                        <p className="font-medium capitalize">{method.type} ending in {method.last4}</p>
-                        {method.brand && <p className="text-sm text-muted-foreground">{method.brand}</p>}
+                        <p className="font-medium capitalize">{method.brand ?? method.type} ending in {method.last4}</p>
+                        {method.expiryMonth && method.expiryYear && (
+                          <p className="text-sm text-muted-foreground">Expires {method.expiryMonth}/{method.expiryYear % 100}</p>
+                        )}
                       </div>
                     </div>
-                    {method.isDefault && <Badge variant="secondary">Default</Badge>}
+                    <div className="flex items-center gap-2">
+                      {method.isDefault && <Badge>Default</Badge>}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" className="w-8 h-8 p-0">
+                            <MoreVertical className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="glass backdrop-blur-xl">
+                          {!method.isDefault && (
+                            <DropdownMenuItem onClick={() => toast({
+                              title: "Set as Default",
+                              description: "Set as default clicked!",
+                              type: "default",
+                            })}>
+                              Set as Default
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem onClick={() => toast({
+                            title: "Remove",
+                            description: "Remove clicked!",
+                            type: "destructive",
+                          })}>
+                            Remove
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </motion.li>
                 ))}
               </ul>
@@ -256,7 +313,9 @@ export default function BillingPage() {
               <div className="text-center text-muted-foreground py-8">
                 <Wallet className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
                 <p>No payment methods added yet.</p>
-                <Button variant="outline" className="mt-4">Add Your First Method</Button>
+                <Button variant="outline" className="mt-4" onClick={() => setShowPaymentForm(true)}>
+                  Add Your First Method
+                </Button>
               </div>
             )}
           </CardContent>
@@ -394,6 +453,27 @@ export default function BillingPage() {
           </Card>
         </motion.div>
       )}
+
+      {/* Add Payment Method Dialog */}
+      <Dialog open={showPaymentForm} onOpenChange={setShowPaymentForm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add New Payment Method</DialogTitle>
+            <DialogDescription>
+              This is a placeholder for adding new payment methods. Integration with a payment gateway (e.g., Stripe) would go here.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Input placeholder="Card Number" />
+            <div className="grid grid-cols-2 gap-4">
+              <Input placeholder="MM/YY" />
+              <Input placeholder="CVC" />
+            </div>
+            <Input placeholder="Cardholder Name" />
+            <Button className="w-full">Save Payment Method</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   );
 } 

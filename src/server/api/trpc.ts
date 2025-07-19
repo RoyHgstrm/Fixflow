@@ -10,64 +10,75 @@
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { ZodError } from "zod";
+import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { prisma } from '@/lib/prisma';
+import { type UserRole, USER_ROLES, CustomSession, PlanType, SubscriptionStatus } from "@/lib/types";
 
-import { db } from "@/server/db";
-import { getServerUser } from '@/lib/supabase/server'; // Changed from getServerSession
-import { UserRole } from '@/lib/types';
+interface CreateContextOptions {
+  headers: Headers;
+}
 
-/**
- * 1. CONTEXT
- *
- * This section defines the "contexts" that are available in the backend API.
- *
- * These allow you to access things when processing a request, like the database, the session, etc.
- *
- * This helper generates the "internals" for a tRPC context. The API handler and RSC clients each
- * wrap this and provides the required context.
- *
- * @see https://trpc.io/docs/server/context
- */
 export const createTRPCContext = async (opts: { headers: Headers }) => {
-  const { data: { user } } = await getServerUser(); // Changed from getServerSession
+  const supabase = await createServerSupabaseClient();
+  const { data: { session }, error } = await supabase.auth.getSession();
 
-  let session = null;
-  let companyId: string | null = null;
-  let userRole: UserRole = UserRole.CLIENT;
+  let userSession: CustomSession | null = null;
 
-  if (user) {
-    userRole = (user.user_metadata?.role as UserRole) || UserRole.CLIENT;
-    companyId = (user.user_metadata?.company_id as string) || null;
-    // Construct a compatible session object if needed for existing components
-    session = {
-      user: {
-        ...user,
-        role: userRole,
-        companyId: companyId,
-        company: companyId ? { id: companyId } : undefined, // Basic company info
-        name: user.user_metadata?.full_name || user.email || 'User',
-        image: user.user_metadata?.avatar_url || undefined,
+  if (session?.user?.id) {
+    const userProfile = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        companyId: true,
+        company: {
+          select: {
+            id: true,
+            name: true,
+            planType: true,
+            subscriptionStatus: true,
+            trialEndDate: true,
+          },
+        },
       },
-      expires: '', // Placeholder or derive from user.exp
-    };
+    });
+
+    if (userProfile) {
+      userSession = {
+        user: {
+          id: userProfile.id,
+          email: userProfile.email || undefined,
+          name: userProfile.name || undefined,
+          role: userProfile.role,
+          companyId: userProfile.companyId,
+          company: userProfile.company ? {
+            id: userProfile.company.id,
+            name: userProfile.company.name,
+            planType: userProfile.company.planType,
+            subscription: {
+              status: userProfile.company.subscriptionStatus,
+              trial_end: userProfile.company.trialEndDate?.toISOString() || null,
+            },
+          } : undefined,
+        },
+        role: userProfile.role,
+        expires: session.expires_at?.toString() || undefined,
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+        expires_in: session.expires_in,
+        token_type: session.token_type,
+      };
+    }
   }
 
   return {
-    db,
-    session,
-    user,
-    companyId,
-    userRole,
-    ...opts,
+    session: userSession,
+    prisma, 
   };
 };
 
-/**
- * 2. INITIALIZATION
- *
- * This is where the tRPC API is initialized, connecting the context and transformer. We also parse
- * ZodErrors so that you get typesafety on the frontend if your procedure fails due to validation
- * errors on the backend.
- */
 const t = initTRPC.context<typeof createTRPCContext>().create({
   transformer: superjson,
   errorFormatter({ shape, error }) {
@@ -75,84 +86,31 @@ const t = initTRPC.context<typeof createTRPCContext>().create({
       ...shape,
       data: {
         ...shape.data,
-        zodError:
-          error.cause instanceof ZodError ? error.cause.flatten() : null,
+        zodError: error.cause instanceof ZodError ? error.cause.flatten() : null,
       },
     };
   },
 });
 
-/**
- * Create a server-side caller.
- *
- * @see https://trpc.io/docs/server/server-side-calls
- */
-export const createCallerFactory = t.createCallerFactory;
-
-/**
- * 3. ROUTER & PROCEDURE (THE IMPORTANT BIT)
- *
- * These are the pieces you use to build your tRPC API. You should import these a lot in the
- * "/src/server/api/routers" directory.
- */
-
-/**
- * This is how you create new routers and sub-routers in your tRPC API. 
- *
- * @see https://trpc.io/docs/router
- */
 export const createTRPCRouter = t.router;
 
-/**
- * Middleware for timing procedure execution and adding an artificial delay in development.
- *
- * You can remove this if you don't like it, but it can help catch unwanted waterfalls by simulating
- * network latency that would occur in production but not in local development.
- */
-const timingMiddleware = t.middleware(async ({ next, path }) => {
-  const start = Date.now();
+export const publicProcedure = t.procedure;
 
-  if (t._config.isDev) {
-    // artificial delay in dev
-    const waitMs = Math.floor(Math.random() * 400) + 100;
-    await new Promise((resolve) => setTimeout(resolve, waitMs));
+export const protectedProcedure = t.procedure.use(({ ctx, next }) => {
+  if (!ctx.session || !ctx.session.user || !ctx.session.user.role) {
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "Not authenticated" });
   }
 
-  const result = await next();
+  const userRole: UserRole = ctx.session.user.role;
 
-  const end = Date.now();
-  console.log(`[TRPC] ${path} took ${end - start}ms to execute`);
-
-  return result;
-});
-
-/**
- * Public (unauthenticated) procedure
- *
- * This is the base piece you use to build new queries and mutations on your tRPC API. It does not
- * guarantee that a user querying is authorized, but you can still access user session data if they
- * are logged in.
- */
-export const publicProcedure = t.procedure.use(timingMiddleware);
-
-/**
- * Protected (authenticated) procedure
- *
- * If you want a query or mutation to ONLY be accessible to logged in users, use this. It verifies
- * the session is valid and guarantees `ctx.session.user` is not null.
- *
- * @see https://trpc.io/docs/procedures
- */
-export const protectedProcedure = t.procedure
-  .use(timingMiddleware)
-  .use(({ ctx, next }) => {
-    if (!ctx.session?.user) {
-      throw new TRPCError({ code: "UNAUTHORIZED" });
-    }
-    return next({
-      ctx: {
-        // infers the `session` as non-nullable
-        session: { ...ctx.session, user: ctx.session.user },
+  return next({
+    ctx: {
+      ...ctx,
+      session: {
+        ...ctx.session,
+        user: ctx.session.user,
+        userRole: userRole,
       },
-    });
+    },
   });
+});

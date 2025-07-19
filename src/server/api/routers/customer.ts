@@ -1,215 +1,128 @@
-import { z } from 'zod';
-import { createTRPCRouter, protectedProcedure } from '../trpc';
-import { TRPCError } from '@trpc/server';
-import { type UserRole } from '@/lib/types';
+import { z } from "zod";
+import { TRPCError } from "@trpc/server";
+import {
+  type CustomerWithRelations,
+  type PaginatedResponse,
+  USER_ROLES, // Import USER_ROLES from here
+  UserRole // Import UserRole type from here
+} from "@/lib/types";
+import { CustomerType } from '@prisma/client'; // Import CustomerType from Prisma
+import {
+  createTRPCRouter,
+  protectedProcedure,
+} from "@/server/api/trpc";
 
-// Define specific types for customer-related operations
-type CustomerCreateInput = {
-  name: string;
-  email: string;
-  phone?: string;
-  address?: string;
-  companyName?: string;
-};
+const listCustomersSchema = z.object({
+  limit: z.number().min(1).max(100).default(50),
+  cursor: z.string().optional(),
+  type: z.nativeEnum(CustomerType).optional().nullable(),
+  search: z.string().optional().nullable(),
+});
 
-type CustomerUpdateInput = Partial<CustomerCreateInput> & {
-  id: string;
-};
+const createCustomerSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  email: z.string().email("Invalid email address").optional().nullable(),
+  phone: z.string().optional().nullable(),
+  address: z.string().optional().nullable(),
+  city: z.string().optional().nullable(),
+  state: z.string().optional().nullable(),
+  zipCode: z.string().optional().nullable(),
+  type: z.nativeEnum(CustomerType).default(CustomerType.RESIDENTIAL),
+  notes: z.string().optional().nullable(),
+  latitude: z.number().optional().nullable(),
+  longitude: z.number().optional().nullable(),
+});
+
+const updateCustomerSchema = z.object({
+  id: z.string().min(1, "Customer ID is required"),
+  name: z.string().min(1, "Name is required").optional(),
+  email: z.string().email("Invalid email address").optional().nullable(),
+  phone: z.string().optional().nullable(),
+  address: z.string().optional().nullable(),
+  city: z.string().optional().nullable(),
+  state: z.string().optional().nullable(),
+  zipCode: z.string().optional().nullable(),
+  type: z.nativeEnum(CustomerType).optional(),
+  notes: z.string().optional().nullable(),
+  latitude: z.number().optional().nullable(),
+  longitude: z.number().optional().nullable(),
+});
 
 export const customerRouter = createTRPCRouter({
-  create: protectedProcedure
-    .input(
-      z.object({
-        name: z.string().min(2, 'Name must be at least 2 characters'),
-        email: z.string().email('Invalid email address'),
-        phone: z.string().optional(),
-        address: z.string().optional(),
-        companyName: z.string().optional(),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      // Validate user role
-      const userRole = ctx.session?.user?.role ?? 'EMPLOYEE';
-      if (!['OWNER', 'MANAGER', 'ADMIN'].includes(userRole)) {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'You do not have permission to create customers',
-        });
-      }
-
-      try {
-        const customer = await ctx.db.customer.create({
-          data: {
-            ...input,
-            companyId: ctx.session.user.companyId!, // Non-null assertion
-            createdById: ctx.session.user.id, // Non-null assertion
-          },
-        });
-
-        return customer;
-      } catch (error) {
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to create customer',
-          cause: error,
-        });
-      }
-    }),
-
-  getStats: protectedProcedure
-    .input(
-      z.object({
-        from: z.date().optional(),
-        to: z.date().optional(),
-      }).optional()
-    )
-    .query(async ({ ctx, input }) => {
-      const companyId = ctx.session.user.companyId;
-
-      if (!companyId) {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'No company associated with user',
-        });
-      }
-
-      try {
-        const where: any = { companyId };
-
-        // Optional date filtering
-        if (input?.from && input?.to) {
-          where.createdAt = {
-            gte: input.from,
-            lte: input.to,
-          };
-        }
-
-        // Total customers
-        const totalCustomers = await ctx.db.customer.count({ where });
-
-        // Customers by type
-        const customerTypes = await ctx.db.customer.groupBy({
-          by: ['type'],
-          where: { companyId },
-          _count: true,
-        });
-
-        // Prepare type-specific counts
-        const typeStats = customerTypes.reduce((acc: Record<string, number>, type: { type: string; _count: number }) => {
-          acc[type.type.toLowerCase()] = type._count;
-          return acc;
-        }, {} as Record<string, number>);
-
-        // Calculate growth for the current period (new customers within the period)
-        const newCustomersInPeriod = await ctx.db.customer.count({ where });
-
-        // For growth, we typically compare to a previous period. 
-        // Let's define a simple previous period as the same duration immediately preceding the current period.
-        const now = new Date();
-        const oneMonthAgo = new Date(now.setMonth(now.getMonth() - 1));
-        const threeMonthsAgo = new Date(now.setMonth(now.getMonth() - 3));
-        const oneYearAgo = new Date(now.setFullYear(now.getFullYear() - 1));
-
-        const getCustomersCountForPeriod = async (startDate: Date, endDate: Date) => {
-          return await ctx.db.customer.count({
-            where: {
-              companyId,
-              createdAt: {
-                gte: startDate,
-                lte: endDate,
-              },
-            },
-          });
-        };
-
-        const newCustomersLastMonth = await getCustomersCountForPeriod(oneMonthAgo, new Date());
-        const newCustomersLastQuarter = await getCustomersCountForPeriod(threeMonthsAgo, new Date());
-        const newCustomersLastYear = await getCustomersCountForPeriod(oneYearAgo, new Date());
-
-        return {
-          totalCustomers,
-          residential: typeStats.residential || 0,
-          commercial: typeStats.commercial || 0,
-          industrial: typeStats.industrial || 0,
-          growth: {
-            total: {
-              isPositive: newCustomersInPeriod >= 0, // Always true if counting new customers
-              value: newCustomersInPeriod,
-              period: input?.from && input?.to ? 'custom' : 'current',
-            },
-            residential: {
-              isPositive: (typeStats.residential || 0) > 0,
-              newCustomers: typeStats.residential || 0,
-              period: 'quarter',
-            },
-            commercial: {
-              isPositive: (typeStats.commercial || 0) > 0,
-              newCustomers: typeStats.commercial || 0,
-              period: 'month',
-            },
-            industrial: {
-              isPositive: (typeStats.industrial || 0) > 0,
-              newCustomers: typeStats.industrial || 0,
-              period: 'year',
-            },
-          },
-        };
-      } catch (error) {
-        console.error('Failed to fetch customer stats:', error);
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to fetch customer statistics',
-        });
-      }
-    }),
-
   list: protectedProcedure
-    .input(
-      z.object({
-        limit: z.number().min(1).max(100).default(50),
-        cursor: z.string().optional(),
-        search: z.string().optional(),
-      })
-    )
+    .input(listCustomersSchema)
     .query(async ({ ctx, input }) => {
-      const { limit, cursor, search } = input;
-      const companyId = ctx.session.user.companyId;
+      const { limit = 50, cursor, type, search } = input;
+      const { user } = ctx.session;
+
+      if (!user || !user.companyId) {
+        throw new TRPCError({ code: "UNAUTHORIZED" });
+      }
+
+      const where: Record<string, unknown> = { 
+        companyId: user.companyId 
+      };
+
+      if (type) {
+        where.type = type;
+      }
+
+      if (search) {
+        where.OR = [
+          { name: { contains: search, mode: 'insensitive' } },
+          { email: { contains: search, mode: 'insensitive' } },
+          { phone: { contains: search, mode: 'insensitive' } },
+        ];
+      }
+
+      const customers = await ctx.prisma.customer.findMany({
+        where,
+        take: limit + 1,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          _count: {
+            select: { workOrders: true, invoices: true }
+          }
+        }
+      });
+
+      let nextCursor: string | undefined;
+      if (customers.length > limit) {
+        const lastCustomer = customers.pop();
+        nextCursor = lastCustomer?.id;
+      }
+
+      return {
+        items: customers,
+        nextCursor,
+        hasMore: !!nextCursor
+      };
+    }),
+
+  getById: protectedProcedure
+    .input(z.object({ id: z.string().min(1) }))
+    .query(async ({ ctx, input }) => {
+      const { user } = ctx.session;
+      const userRole = user.role || USER_ROLES.EMPLOYEE;
+      const companyId = user.companyId;
 
       if (!companyId) {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'No company associated with user',
-        });
+        throw new TRPCError({ code: "FORBIDDEN", message: "User does not belong to a company" });
       }
 
       try {
-        // Build where clause
-        const where: any = { companyId };
+        const where: any = {
+          id: input.id,
+          companyId: companyId,
+        };
 
-        // Add search filter if provided
-        if (search) {
-          where.AND = [
-            { companyId },
-            {
-              OR: [
-                { name: { contains: search, mode: 'insensitive' } },
-                { email: { contains: search, mode: 'insensitive' } },
-                { phone: { contains: search, mode: 'insensitive' } },
-              ],
-            },
-          ];
-          // Remove the direct companyId from the top-level where if AND is used
-          delete where.companyId;
+        if (userRole === USER_ROLES.SOLO) {
+          where.createdById = user.id;
+        } else if (userRole === USER_ROLES.CLIENT) {
+          where.id = user.id;
         }
 
-        // Handle cursor-based pagination
-        const cursorOptions = cursor ? { cursor: { id: cursor }, skip: 1 } : undefined;
-
-        // Fetch customers
-        console.log('Customer list - companyId:', companyId);
-        console.log('Customer list - where clause:', where);
-        const customers = await ctx.db.customer.findMany({
-          ...cursorOptions,
+        const customer = await ctx.prisma.customer.findUnique({
           where,
           select: {
             id: true,
@@ -217,165 +130,166 @@ export const customerRouter = createTRPCRouter({
             email: true,
             phone: true,
             address: true,
+            city: true,
+            state: true,
+            zipCode: true,
+            type: true,
+            notes: true,
             latitude: true,
             longitude: true,
-            type: true,
             createdAt: true,
             updatedAt: true,
-            createdBy: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-            _count: {
-              select: { 
-                workOrders: true,
-                invoices: true,
-              },
-            },
+            createdById: true,
+            companyId: true,
+            createdBy: { select: { id: true, name: true, email: true } },
+            workOrders: { include: { assignedTo: true, customer: true, createdBy: true } },
+            invoices: { include: { customer: true, workOrder: true } },
           },
-          orderBy: {
-            createdAt: 'desc',
-          },
-          take: limit + 1,
         });
-        console.log('Customers fetched from DB:', customers);
 
-        // Return paginated results
-        const hasNextPage = customers.length > limit;
-        const nextCursor = hasNextPage ? customers[customers.length - 1]?.id : undefined;
+        if (!customer) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Customer not found" });
+        }
 
-        return {
-          items: customers.slice(0, limit).map((customer: any) => ({
-            id: customer.id,
-            name: customer.name,
-            email: customer.email,
-            phone: customer.phone,
-            address: customer.address,
-            type: customer.type ?? 'RESIDENTIAL', // Default type
-            createdAt: customer.createdAt,
-            updatedAt: customer.updatedAt ?? new Date(), // Default to current date
-            createdBy: customer.createdBy ?? { 
-              id: '', 
-              name: 'Unknown', 
-              email: '' 
-            },
-            createdById: customer.createdBy?.id ?? '',
-            workOrders: [], // Empty array as we didn't fetch related work orders
-            invoices: [], // Empty array as we didn't fetch related invoices
-            _count: {
-              workOrders: customer._count.workOrders,
-              invoices: customer._count.invoices ?? 0,
-            },
-            notes: null, // Optional field
-            severity: null, // Optional field
-          })),
-          nextCursor,
-          hasMore: hasNextPage,
-        };
+        if ((userRole === USER_ROLES.FIELD_WORKER || userRole === USER_ROLES.TECHNICIAN) &&
+            !customer.workOrders?.some(wo => wo.assignedToId === user.id)) {
+        }
+
+        return customer;
       } catch (error) {
-        console.error('Failed to fetch customers:', error);
+        console.error("Failed to fetch customer:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to fetch customers',
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to fetch customer",
         });
       }
     }),
 
-  getById: protectedProcedure
-    .input(z.object({ id: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const companyId = ctx.session.user.companyId;
+  create: protectedProcedure
+    .input(createCustomerSchema)
+    .mutation(async ({ ctx, input }) => {
+      const { user } = ctx.session;
 
-      if (!companyId) {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'No company associated with user',
-        });
+      if (!user || !user.companyId) {
+        throw new TRPCError({ code: "UNAUTHORIZED" });
       }
 
-      const customer = await ctx.db.customer.findUnique({
-        where: { 
-          id: input.id,
-          companyId: companyId 
-        },
-        include: {
-          workOrders: {
-            select: {
-              id: true,
-              status: true,
-              scheduledDate: true,
-              type: true,
-              amount: true, // Added missing amount field
-            },
-            orderBy: { scheduledDate: 'desc' },
-            take: 5, // Limit to last 5 work orders
-          },
-          invoices: {
-            select: {
-              id: true,
-              amount: true,
-              status: true,
-              createdAt: true,
-            },
-            orderBy: { createdAt: 'desc' },
-            take: 5, // Limit to last 5 invoices
-          },
-        },
+      return ctx.prisma.customer.create({
+        data: {
+          ...input,
+          companyId: user.companyId,
+          createdById: user.id,
+        }
       });
-
-      if (!customer) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Customer not found',
-        });
-      }
-
-      return customer;
     }),
 
   update: protectedProcedure
-    .input(
-      z.object({
-        id: z.string(),
-        name: z.string().min(2, 'Name must be at least 2 characters').optional(),
-        email: z.string().email('Invalid email address').optional(),
-        phone: z.string().optional(),
-        address: z.string().optional(),
-        city: z.string().optional(),
-        state: z.string().optional(),
-        zipCode: z.string().optional(),
-        type: z.enum(['RESIDENTIAL', 'COMMERCIAL', 'INDUSTRIAL']).optional(),
-        notes: z.string().optional(),
-      })
-    )
+    .input(updateCustomerSchema)
     .mutation(async ({ ctx, input }) => {
-      const userRole = ctx.session?.user?.role ?? 'EMPLOYEE';
-      if (!['OWNER', 'MANAGER', 'ADMIN'].includes(userRole)) {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'You do not have permission to update customers',
-        });
+      const userRole = ctx.session?.user?.role || USER_ROLES.EMPLOYEE;
+      const companyId = ctx.session.user.companyId;
+
+      if (!companyId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "User does not belong to a company" });
+      }
+
+      const allowedRoles: UserRole[] = [USER_ROLES.OWNER, USER_ROLES.MANAGER, USER_ROLES.ADMIN, USER_ROLES.SOLO, USER_ROLES.TEAM];
+      if (!allowedRoles.includes(userRole as UserRole)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to update customers" });
       }
 
       try {
-        const updatedCustomer = await ctx.db.customer.update({
+        const existingCustomer = await ctx.prisma.customer.findUnique({
           where: {
             id: input.id,
-            companyId: ctx.session.user.companyId!, // Ensure customer belongs to company
+            companyId: companyId,
           },
+        });
+
+        if (!existingCustomer) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Customer not found" });
+        }
+
+        const updatedCustomer = await ctx.prisma.customer.update({
+          where: { id: input.id },
           data: input,
         });
 
         return updatedCustomer;
       } catch (error) {
+        console.error("Failed to update customer:", error);
         throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to update customer',
-          cause: error,
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to update customer",
         });
       }
     }),
-}); 
+
+  delete: protectedProcedure
+    .input(z.object({ id: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const userRole = ctx.session?.user?.role || USER_ROLES.EMPLOYEE;
+      const companyId = ctx.session.user.companyId;
+
+      if (!companyId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "User does not belong to a company" });
+      }
+
+      const allowedRoles: UserRole[] = [USER_ROLES.OWNER, USER_ROLES.MANAGER, USER_ROLES.ADMIN, USER_ROLES.SOLO, USER_ROLES.TEAM];
+      if (!allowedRoles.includes(userRole as UserRole)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to delete customers" });
+      }
+
+      try {
+        const existingCustomer = await ctx.prisma.customer.findUnique({
+          where: {
+            id: input.id,
+            companyId: companyId,
+          },
+        });
+
+        if (!existingCustomer) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Customer not found" });
+        }
+
+        await ctx.prisma.customer.delete({ where: { id: input.id } });
+        return { id: input.id };
+      } catch (error) {
+        console.error("Failed to delete customer:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to delete customer",
+        });
+      }
+    }),
+
+  getStats: protectedProcedure
+    .query(async ({ ctx }) => {
+      const { user } = ctx.session;
+
+      if (!user || !user.companyId) {
+        throw new TRPCError({ code: "UNAUTHORIZED" });
+      }
+
+      const customerStats = await ctx.prisma.customer.groupBy({
+        by: ['type'],
+        where: { companyId: user.companyId },
+        _count: {
+          id: true
+        }
+      });
+
+      const totalCustomers = customerStats.reduce((sum, stat) => sum + stat._count.id, 0);
+
+      const stats = {
+        totalCustomers,
+        residential: customerStats.find(stat => stat.type === CustomerType.RESIDENTIAL)?._count.id || 0,
+        commercial: customerStats.find(stat => stat.type === CustomerType.COMMERCIAL)?._count.id || 0,
+        industrial: customerStats.find(stat => stat.type === CustomerType.INDUSTRIAL)?._count.id || 0,
+      };
+
+      return stats;
+    }),
+});
+
+export default customerRouter; 

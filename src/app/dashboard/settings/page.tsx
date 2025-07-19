@@ -44,7 +44,7 @@ const cardVariants = {
 };
 
 export default function SettingsPage() {
-  const { data: session, update } = useSession();
+  const { session, update } = useSession();
   const [activeTab, setActiveTab] = useState('profile');
   const [showPassword, setShowPassword] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -78,7 +78,13 @@ export default function SettingsPage() {
           industry: settingsData.company.industry || '',
         });
       }
-      setNotificationSettings(settingsData.notificationSettings);
+      setNotificationSettings({
+        emailNotifications: settingsData.notificationSettings.emailNotifications,
+        workOrderUpdates: settingsData.notificationSettings.workOrderUpdates,
+        teamUpdates: settingsData.notificationSettings.teamUpdates,
+        systemUpdates: settingsData.notificationSettings.systemUpdates,
+        marketingEmails: settingsData.notificationSettings.marketingEmails,
+      });
     }
   }, [settingsData]);
 
@@ -103,11 +109,11 @@ export default function SettingsPage() {
   });
 
   const [notificationSettings, setNotificationSettings] = useState({
-    emailNotifications: true,
-    workOrderUpdates: true,
-    teamUpdates: true,
-    systemUpdates: false,
-    marketingEmails: false,
+    emailNotifications: settingsData?.notificationSettings?.emailNotifications ?? true,
+    workOrderUpdates: settingsData?.notificationSettings?.workOrderUpdates ?? true,
+    teamUpdates: settingsData?.notificationSettings?.teamUpdates ?? true,
+    systemUpdates: settingsData?.notificationSettings?.systemUpdates ?? false,
+    marketingEmails: settingsData?.notificationSettings?.marketingEmails ?? false,
   });
 
   const userRole = (session?.user as any)?.role || UserRole.EMPLOYEE;

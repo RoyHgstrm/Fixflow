@@ -176,10 +176,26 @@ model User {
     teamMemberships       TeamMember[]
     sentInvitations       CompanyInvitation[]
     acceptedInvitations   CompanyInvitation[]   @relation("AcceptedInvitations")
+    notifications         UserNotificationSettings? // One-to-one relation
     
     @@index([email])
     @@index([role])
     @@index([companyId])
+}
+
+model UserNotificationSettings {
+    id                 String    @id @default(cuid())
+    userId             String    @unique
+    emailNotifications Boolean   @default(true)
+    workOrderUpdates   Boolean   @default(true)
+    teamUpdates        Boolean   @default(true)
+    systemUpdates      Boolean   @default(false)
+    marketingEmails    Boolean   @default(false)
+    createdAt          DateTime  @default(now())
+    updatedAt          DateTime  @updatedAt
+    user               User      @relation(fields: [userId], references: [id])
+
+    @@map("user_notification_settings")
 }
 
 model Customer {

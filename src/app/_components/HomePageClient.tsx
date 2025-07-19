@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { motion } from "framer-motion";
 import { AnimatedHeading } from "./AnimatedHeading";
-import { PLAN_CONFIGS, PlanType, type UserRole } from "@/lib/types";
+import { PlanType } from "@prisma/client";
 import { 
   ArrowRight, 
   CheckCircle, 
@@ -26,6 +26,7 @@ import {
   CheckCircle2,
   Sparkles
 } from "lucide-react";
+import { PLAN_CONFIGS } from '@/lib/constants';
 
 const containerVariants = {
   hidden: { opacity: 0 },

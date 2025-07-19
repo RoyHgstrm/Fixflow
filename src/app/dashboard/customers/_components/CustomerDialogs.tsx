@@ -26,9 +26,6 @@ export function CustomerDialogs({
       {showCreateCustomerDialog && (
         <CreateCustomerDialog
           open={showCreateCustomerDialog}
-          onOpenChange={(open) => {
-            if (!open) onCreateCustomerDialogClose();
-          }}
           onSuccess={async () => {
             await onRefresh();
             onCreateCustomerDialogClose();
@@ -38,10 +35,6 @@ export function CustomerDialogs({
       {showCreateWorkOrderDialog && selectedCustomerId && (
         <CreateWorkOrderDialog
           open={showCreateWorkOrderDialog}
-          customerId={selectedCustomerId}
-          onOpenChange={(open) => {
-            if (!open) onCreateWorkOrderDialogClose();
-          }}
           onSuccess={async () => {
             await onRefresh();
             onCreateWorkOrderDialogClose();

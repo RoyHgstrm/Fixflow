@@ -1,52 +1,66 @@
-import { PlanType } from './types';
+import { PlanType, PlanFeatures } from "./types";
 
-export const PLAN_CONFIGS = {
+export const PLAN_CONFIGS: Record<PlanType, PlanFeatures> = {
   [PlanType.SOLO]: {
-    name: 'Solo Plan',
-    description: 'Perfect for individual entrepreneurs',
+    name: "Solo",
+    description: "Perfect for individual operators",
     price: 29,
+    maxUsers: 1,
     features: [
-      'Single User',
-      'Basic Reporting',
-      'Email Support',
-      'Limited Work Orders'
+      "1 User Account",
+      "Unlimited Work Orders",
+      "Basic Customer Management",
+      "Invoicing & Payments",
+      "Standard Reports",
+      "Email Support",
     ],
-    isPopular: false
+    isPopular: false,
   },
   [PlanType.TEAM]: {
-    name: 'Team Plan',
-    description: 'Ideal for small teams',
-    price: 99,
+    name: "Team",
+    description: "Designed for small to medium teams",
+    price: 59,
+    maxUsers: 10,
     features: [
-      'Multiple Users',
-      'Advanced Reporting',
-      'Priority Support',
-      'Unlimited Work Orders'
+      "Up to 10 User Accounts",
+      "Unlimited Work Orders",
+      "Advanced Customer Management",
+      "Team Scheduling & Dispatch",
+      "Advanced Reports & Analytics",
+      "Priority Email Support",
+      "Role-based Access Control",
     ],
-    isPopular: true
+    isPopular: true,
   },
   [PlanType.BUSINESS]: {
-    name: 'Business Plan',
-    description: 'Scalable solution for growing businesses',
-    price: 249,
+    name: "Business",
+    description: "Comprehensive solution for growing businesses",
+    price: 99,
+    maxUsers: 50,
     features: [
-      'Unlimited Users',
-      'Advanced Analytics',
-      'Dedicated Support',
-      'Custom Integrations'
+      "Up to 50 User Accounts",
+      "All Team Plan Features",
+      "Customizable Workflows",
+      "API Access",
+      "Dedicated Account Manager",
+      "Phone & Chat Support",
+      "Advanced Integrations",
     ],
-    isPopular: false
+    isPopular: false,
   },
   [PlanType.ENTERPRISE]: {
-    name: 'Enterprise Plan',
-    description: 'Comprehensive solution for large organizations',
-    price: 0, // Custom pricing
+    name: "Enterprise",
+    description: "Tailored for large-scale operations",
+    price: 0,
+    maxUsers: 0,
     features: [
-      'Unlimited Everything',
-      'Dedicated Account Manager',
-      '24/7 Premium Support',
-      'Custom Development'
+      "Unlimited Users",
+      "All Business Plan Features",
+      "Custom Integrations",
+      "On-premise Deployment Options",
+      "SLA & Uptime Guarantees",
+      "24/7 Premium Support",
     ],
-    isPopular: false
-  }
+    isPopular: false,
+  },
 }; 

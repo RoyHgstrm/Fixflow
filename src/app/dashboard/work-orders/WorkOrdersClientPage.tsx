@@ -27,10 +27,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { PrimaryActionButton, SecondaryActionButton, ActionButtonGroup } from '@/components/ui/action-button';
-import { api } from "@/trpc/react";
+import { trpc } from '@/trpc/react';
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import CreateWorkOrderDialog from '@/components/work-orders/CreateWorkOrderDialog';
-import { type WorkOrderWithRelations, type WorkOrderResponse, type WorkOrderStatus } from '@/lib/types';
+import { type WorkOrderWithRelations, type WorkOrderResponse, type WorkOrderStatus, USER_ROLES } from '@/lib/types';
 import { getStatusColor, getPriorityColor, getStatusIcon } from "@/lib/utils";
 
 const containerVariants = {
@@ -59,45 +59,37 @@ const cardVariants = {
 const workOrderStatuses = ['All', 'PENDING', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
 
 export default function WorkOrdersClientPage() {
-  const { data: session } = useSession();
+  const { session } = useSession();
   const router = useRouter();
   const [selectedStatus, setSelectedStatus] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
 
-  // Replace type casting with proper type definition
-  const userRole = session?.user?.role ?? 'ADMIN';
+  const userRole = session?.user?.role ?? USER_ROLES.EMPLOYEE;
   
-  // Set dynamic page title
   usePageTitle(userRole);
 
-  // Improve type safety in API query
-  const { data: workOrdersData, isLoading: workOrdersLoading, error: workOrdersError } = api.workOrder.list.useQuery({
+  const { data: workOrdersData, isLoading: workOrdersLoading, error: workOrdersError } = trpc.workOrder.list.useQuery({
     status: selectedStatus === 'All' ? undefined : selectedStatus as WorkOrderStatus,
     search: searchQuery ?? undefined,
     limit: 50,
   });
 
-  // Explicitly type the stats query
-  const { data: stats, isLoading: statsLoading } = api.workOrder.getStats.useQuery();
+  const { data: stats, isLoading: statsLoading } = trpc.workOrder.getStats.useQuery();
 
-  // Improve type safety for work orders
   const workOrders = workOrdersData?.items ?? [];
 
-  // Improve type safety for total value calculation
   const totalValue = workOrders
-    .filter((order) => order.status === 'COMPLETED')
-    .reduce((sum, order) => sum + (order.amount ?? 0), 0);
+    .filter((order: WorkOrderResponse) => order.status === 'COMPLETED')
+    .reduce((sum: number, order: WorkOrderResponse) => sum + (order.amount ?? 0), 0);
 
-  // Refetch data when work order is created
   const handleWorkOrderCreated = () => {
-    window.location.reload(); // Simple refresh for now
+    window.location.reload();
   };
 
-  // Improve type safety for header content
   const getHeaderContent = () => {
     switch (userRole) {
-    case 'ADMIN':
+    case USER_ROLES.ADMIN:
       return {
         title: 'Work Orders Management',
         description: 'Manage and track all work orders across your organization',
@@ -105,7 +97,7 @@ export default function WorkOrdersClientPage() {
         color: 'text-primary',
         bgColor: 'bg-primary/10'
       };
-    case 'TECHNICIAN':
+    case USER_ROLES.TECHNICIAN:
       return {
         title: 'My Work Orders',
         description: 'View and update your assigned work orders',
@@ -113,7 +105,7 @@ export default function WorkOrdersClientPage() {
         color: 'text-green-500',
         bgColor: 'bg-green-500/10'
       };
-    case 'CLIENT':
+    case USER_ROLES.CLIENT:
       return {
         title: 'Service Requests',
         description: 'Track your service requests and work orders',
@@ -135,7 +127,6 @@ export default function WorkOrdersClientPage() {
   const headerContent = getHeaderContent();
   const HeaderIcon = headerContent.icon;
 
-  // Loading state
   if (workOrdersLoading || statsLoading) {
     return (
       <div className="space-y-6">
@@ -167,7 +158,6 @@ export default function WorkOrdersClientPage() {
     );
   }
 
-  // Error state
   if (workOrdersError) {
     return (
       <div className="space-y-6">
@@ -197,7 +187,6 @@ export default function WorkOrdersClientPage() {
       animate="visible"
       className="space-y-6"
     >
-      {/* Header Section */}
       <motion.div variants={cardVariants} className="glass rounded-xl p-6 bg-gradient-to-r from-primary/10 via-blue-500/5 to-purple-500/10 border border-primary/20">
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
           <div className="flex items-center gap-4">
@@ -210,31 +199,28 @@ export default function WorkOrdersClientPage() {
             </div>
           </div>
           
-          {(userRole === 'ADMIN' || userRole === 'TECHNICIAN' || userRole === 'OWNER') && (
+          {(userRole === USER_ROLES.ADMIN || userRole === USER_ROLES.TECHNICIAN || userRole === USER_ROLES.OWNER) && (
             <PrimaryActionButton 
               icon={PlusCircle}
-              size="lg"
-              mobileLabel={userRole === 'ADMIN' ? 'Create' : 'Request'}
+              mobileLabel={userRole === USER_ROLES.ADMIN ? 'Create' : 'Request'}
               onClick={() => { setShowCreateDialog(true); }}
             >
-              {userRole === 'ADMIN' ? 'Create Work Order' : 'Request Assignment'}
+              {userRole === USER_ROLES.ADMIN ? 'Create Work Order' : 'Request Work Order'}
             </PrimaryActionButton>
           )}
           
-          {userRole === 'CLIENT' && (
+          {userRole === USER_ROLES.CLIENT && (
             <PrimaryActionButton 
               icon={PlusCircle}
-              size="lg"
               mobileLabel="Request"
               onClick={() => { setShowCreateDialog(true); }}
             >
-              Request Service
+              Request New Work Order
             </PrimaryActionButton>
           )}
         </div>
       </motion.div>
 
-      {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
         <motion.div variants={cardVariants}>
           <Card className="glass hover:shadow-glow transition-all duration-300 border border-primary/20 group cursor-pointer">
@@ -317,11 +303,9 @@ export default function WorkOrdersClientPage() {
         </motion.div>
       </div>
 
-      {/* Filters and Search */}
       <motion.div variants={cardVariants} className="glass rounded-xl p-6 border border-border/50">
         <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
           <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
-            {/* Search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <input
@@ -333,7 +317,6 @@ export default function WorkOrdersClientPage() {
               />
             </div>
 
-            {/* Status Filter */}
             <div className="flex gap-2 flex-wrap">
               {workOrderStatuses.map((status) => (
                 <Button
@@ -359,7 +342,6 @@ export default function WorkOrdersClientPage() {
         </div>
       </motion.div>
 
-      {/* Work Orders List */}
       <motion.div variants={cardVariants} className="space-y-4">
         {workOrders.length === 0 ? (
           <Card className="glass border border-border/50">
@@ -372,7 +354,7 @@ export default function WorkOrdersClientPage() {
                   : 'Get started by creating your first work order.'
                 }
               </p>
-              {(userRole === 'ADMIN' || userRole === 'TECHNICIAN') && (
+              {(userRole === USER_ROLES.ADMIN || userRole === USER_ROLES.TECHNICIAN) && (
                 <Button className="gradient-primary shadow-glow">
                   <PlusCircle className="w-4 h-4 mr-2" />
                   Create Work Order
@@ -382,7 +364,7 @@ export default function WorkOrdersClientPage() {
           </Card>
         ) : (
           workOrders.map((order: WorkOrderResponse, index: number) => {
-            const StatusIcon = getStatusIcon(order.status);
+            const StatusIcon = getStatusIcon(order.status) as React.ElementType;
             return (
               <motion.div
                 key={order.id}
@@ -393,7 +375,6 @@ export default function WorkOrdersClientPage() {
                 <Card className="glass hover:shadow-glow transition-all duration-300 border border-border/50 group cursor-pointer">
                   <CardContent className="p-6">
                     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                      {/* Main Content */}
                       <div className="flex-1 space-y-3">
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                           <div className="flex items-center gap-3">
@@ -439,7 +420,7 @@ export default function WorkOrdersClientPage() {
                           )}
                         </div>
 
-                        {userRole === 'ADMIN' && order.assignedTo && (
+                        {userRole === USER_ROLES.ADMIN && order.assignedTo && (
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <Wrench className="w-4 h-4" />
                             <span>Assigned to: {order.assignedTo.name}</span>
@@ -451,21 +432,18 @@ export default function WorkOrdersClientPage() {
                         )}
                       </div>
 
-                      {/* Actions */}
                       <ActionButtonGroup spacing="tight">
                         <SecondaryActionButton 
                           icon={Eye}
-                          size="sm"
                           mobileLabel="View"
                           onClick={() => { router.push(`/dashboard/work-orders/${order.id}`); }}
                         >
                           View
                         </SecondaryActionButton>
                         
-                        {(userRole === 'ADMIN' || (userRole === 'TECHNICIAN' && order.status !== 'COMPLETED')) && (
+                        {(userRole === USER_ROLES.ADMIN || (userRole === USER_ROLES.TECHNICIAN && order.status !== 'COMPLETED')) && (
                           <SecondaryActionButton 
                             icon={Edit3}
-                            size="sm"
                             mobileLabel="Edit"
                             onClick={() => { router.push(`/dashboard/work-orders/${order.id}`); }}
                           >
@@ -484,7 +462,7 @@ export default function WorkOrdersClientPage() {
                               <Eye className="mr-2 h-4 w-4" />
                               View Details
                             </DropdownMenuItem>
-                            {(userRole === 'ADMIN' || userRole === 'TECHNICIAN') && (
+                            {(userRole === USER_ROLES.ADMIN || userRole === USER_ROLES.TECHNICIAN) && (
                               <>
                                 <DropdownMenuItem onClick={() => { router.push(`/dashboard/work-orders/${order.id}`); }}>
                                   <Edit3 className="mr-2 h-4 w-4" />
@@ -498,7 +476,7 @@ export default function WorkOrdersClientPage() {
                                 )}
                               </>
                             )}
-                            {userRole === 'ADMIN' && (
+                            {userRole === USER_ROLES.ADMIN && (
                               <DropdownMenuItem className="text-destructive">
                                 <AlertCircle className="mr-2 h-4 w-4" />
                                 Cancel Order
@@ -516,7 +494,6 @@ export default function WorkOrdersClientPage() {
         )}
       </motion.div>
 
-      {/* Create Work Order Dialog */}
       <CreateWorkOrderDialog
         isOpen={showCreateDialog}
         onClose={() => { setShowCreateDialog(false); }}

@@ -87,3 +87,5 @@ __MACOSX/
 !.dockerignore
 !.eslintrc.cjs
 !.prettierrc
+
+package-lock.json

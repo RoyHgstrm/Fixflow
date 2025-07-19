@@ -44,7 +44,8 @@ async function globalSetup() {
     const page = await browser.newPage();
 
     await page.goto('http://localhost:3000/login');
-    await page.waitForSelector('input[name="email"]'); // Wait for the email input to be visible
+    await page.waitForLoadState('networkidle'); // Wait for the page to be fully loaded
+    await page.waitForSelector('input[name="email"]', { timeout: 60000 }); // Increased timeout to 60 seconds
     await page.fill('input[name="email"]', 'test@example.com');
     await page.fill('input[name="password"]', 'password123'); // Assuming a default password for Supabase test users
     await page.click('button[type="submit"]');

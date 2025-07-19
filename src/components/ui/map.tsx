@@ -132,33 +132,4 @@ export function BaseMap({
   );
 }
 
-export async function geocodeAddress(address: string): Promise<[number, number] | null> {
-  try {
-    const response = await fetch('/api/geocode', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ address }),
-    });
-
-    if (!response.ok) {
-      console.warn(`Geocoding failed for address: ${address}`);
-      return null;
-    }
-
-    const data = await response.json();
-
-    if (data.coordinates) {
-      // Return as [lon, lat] for OpenLayers
-      return [data.coordinates.lon, data.coordinates.lat];
-    }
-
-    return null;
-  } catch (error) {
-    console.error('Geocoding request error:', error);
-    return null;
-  }
-}
-
 export default BaseMap; 

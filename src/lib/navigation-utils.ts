@@ -1,28 +1,28 @@
-import { UserRole } from "./types";
-import { 
-  LayoutDashboard, 
-  Users, 
-  FileText, 
-  DollarSign, 
-  Settings, 
-  Calendar, 
-  Shield, 
-  Wrench, 
-  User, 
-  BarChart3 
-} from 'lucide-react';
+import { type IconNode, Home, Users, Briefcase, DollarSign, MapPin, Calendar, FileText, Settings, Shield, Wrench, Package, Truck, LayoutDashboard, GanttChart, ListChecks, Landmark, ScrollText, UserRoundCog, BarChart3, Clock } from 'lucide-react';
+import { type UserRole, USER_ROLES, UserExperience } from '@/lib/types';
 
-export const iconMap = {
-  LayoutDashboard,
-  Users,
-  FileText,
-  DollarSign,
-  Settings,
-  Calendar,
-  Shield,
-  Wrench,
-  User,
-  BarChart3
+export const iconMap: Record<string, React.ComponentType<any>> = {
+  home: Home,
+  dashboard: LayoutDashboard,
+  users: Users,
+  customers: Briefcase,
+  invoices: DollarSign,
+  schedule: Calendar,
+  workOrders: ListChecks,
+  settings: Settings,
+  reports: BarChart3,
+  team: Users,
+  billing: DollarSign,
+  admin: UserRoundCog,
+  security: Shield,
+  maintenance: Wrench,
+  logistics: Truck,
+  assets: Package,
+  finance: Landmark,
+  documents: ScrollText,
+  clock: Clock,
+  solo: MapPin, // Placeholder for solo operator
+  client: Users, // Placeholder for client
 };
 
 export type NavLink = {
@@ -41,182 +41,117 @@ export type NavConfig = {
   links: NavLink[];
 };
 
-// Helper function to get role label
 export const getRoleLabel = (role: UserRole) => {
-  switch (role.toUpperCase()) {
-    case UserRole.OWNER:
-      return 'Owner';
-    case UserRole.MANAGER:
-      return 'Manager';
-    case UserRole.EMPLOYEE:
-      return 'Employee';
-    case UserRole.ADMIN:
-      return 'Administrator';
-    case UserRole.TECHNICIAN:
-      return 'Technician';
-    case UserRole.CLIENT:
-      return 'Client';
-    default:
-      return 'User';
+  switch (role) {
+  case USER_ROLES.OWNER: return 'Owner';
+  case USER_ROLES.MANAGER: return 'Manager';
+  case USER_ROLES.EMPLOYEE: return 'Employee';
+  case USER_ROLES.ADMIN: return 'Administrator';
+  case USER_ROLES.TECHNICIAN: return 'Technician';
+  case USER_ROLES.CLIENT: return 'Client';
+  case USER_ROLES.SOLO: return 'Solo Operator';
+  case USER_ROLES.FIELD_WORKER: return 'Field Worker';
+  default: return 'User';
   }
 };
 
-// Helper function to determine user experience type
-const getUserExperience = (role: string) => {
-  switch (role.toUpperCase()) {
-    case 'OWNER':
-      return 'TEAM_MANAGER'; // Owners get full access
-    case 'MANAGER':
-      return 'TEAM_MANAGER';
-    case 'EMPLOYEE':
-    case 'TECHNICIAN':
-      return 'FIELD_WORKER';
-    case 'ADMIN':
-      return 'TEAM_MANAGER'; // Legacy mapping
-    case 'CLIENT':
-      return 'SOLO_OPERATOR';
-    default:
-      return 'SOLO_OPERATOR';
+const getUserExperience = (role: UserRole) => {
+  switch (role) {
+  case USER_ROLES.OWNER:
+  case USER_ROLES.MANAGER:
+  case USER_ROLES.ADMIN:
+    return UserExperience.TEAM_MANAGER;
+  case USER_ROLES.EMPLOYEE:
+  case USER_ROLES.TECHNICIAN:
+  case USER_ROLES.FIELD_WORKER:
+    return UserExperience.FIELD_WORKER;
+  case USER_ROLES.SOLO:
+    return UserExperience.SOLO_OPERATOR;
+  case USER_ROLES.CLIENT:
+  default:
+    return UserExperience.CLIENT;
   }
 };
 
-// Role-based navigation configuration
-export const getNavConfig = (userRole: string, company?: { planType?: string }): NavConfig => {
-  const experience = getUserExperience(userRole);
-  const planType = company?.planType || 'SOLO';
-  const isSoloPlan = planType === 'SOLO';
+export const getNavConfig = (
+  userRole: UserRole,
+  company?: { planType?: string }
+): NavConfig => {
+  const userExperience = getUserExperience(userRole);
 
-  const baseConfig = {
-    SOLO_OPERATOR: {
-      title: 'My Business',
-      description: 'Your personal dashboard',
-      icon: 'User' as keyof typeof iconMap,
-      color: 'text-primary',
-      bgColor: 'bg-primary/10',
-      links: [
-        {
-          name: 'Today',
-          href: '/dashboard',
-          icon: 'LayoutDashboard' as keyof typeof iconMap,
-          description: 'Your tasks today'
-        },
-        {
-          name: 'Schedule',
-          href: '/dashboard/schedule',
-          icon: 'Calendar' as keyof typeof iconMap,
-          description: 'Your upcoming jobs'
-        },
-        {
-          name: 'Customers',
-          href: '/dashboard/customers',
-          icon: 'Users' as keyof typeof iconMap,
-          description: 'Your customers'
-        },
-        {
-          name: 'Income',
-          href: '/dashboard/invoices',
-          icon: 'DollarSign' as keyof typeof iconMap,
-          description: 'Track your earnings'
-        },
-        {
-          name: 'Billing',
-          href: '/dashboard/billing',
-          icon: 'DollarSign' as keyof typeof iconMap,
-          description: 'Manage your subscription'
-        }
-      ]
-    },
-    FIELD_WORKER: {
-      title: 'My Work',
-      description: 'Your daily tasks and schedule',
-      icon: 'Wrench' as keyof typeof iconMap,
-      color: 'text-green-500',
-      bgColor: 'bg-green-500/10',
-      links: [
-        {
-          name: 'Today',
-          href: '/dashboard',
-          icon: 'LayoutDashboard' as keyof typeof iconMap,
-          description: 'Your jobs today'
-        },
-        {
-          name: 'My Jobs',
-          href: '/dashboard/work-orders',
-          icon: 'FileText' as keyof typeof iconMap,
-          description: 'All assigned tasks'
-        },
-        {
-          name: 'Schedule',
-          href: '/dashboard/schedule',
-          icon: 'Calendar' as keyof typeof iconMap,
-          description: 'Your work schedule'
-        }
-      ]
-    },
-    TEAM_MANAGER: {
-      title: isSoloPlan ? 'My Business' : 'Team Dashboard',
-      description: isSoloPlan ? 'Your personal dashboard' : 'Manage your team and operations',
-      icon: (isSoloPlan ? 'User' : 'Shield') as keyof typeof iconMap,
-      color: isSoloPlan ? 'text-primary' : 'text-blue-500',
-      bgColor: isSoloPlan ? 'bg-primary/10' : 'bg-blue-500/10',
-      links: [
-        {
-          name: 'Dashboard',
-          href: '/dashboard',
-          icon: 'LayoutDashboard' as keyof typeof iconMap,
-          description: isSoloPlan ? 'Your overview' : 'Team overview'
-        },
-        {
-          name: 'Work Orders',
-          href: '/dashboard/work-orders',
-          icon: 'FileText' as keyof typeof iconMap,
-          description: 'All work orders'
-        },
-        {
-          name: 'Schedule',
-          href: '/dashboard/schedule',
-          icon: 'Calendar' as keyof typeof iconMap,
-          description: isSoloPlan ? 'Your scheduling' : 'Team scheduling'
-        },
-        {
-          name: 'Customers',
-          href: '/dashboard/customers',
-          icon: 'Users' as keyof typeof iconMap,
-          description: 'Customer management'
-        },
-        {
-          name: 'Team',
-          href: '/dashboard/team',
-          icon: 'Users' as keyof typeof iconMap,
-          description: 'Team management'
-        },
-        {
-          name: 'Invoices',
-          href: '/dashboard/invoices',
-          icon: 'DollarSign' as keyof typeof iconMap,
-          description: 'Billing & invoices'
-        },
-        {
-          name: 'Billing',
-          href: '/dashboard/billing',
-          icon: 'DollarSign' as keyof typeof iconMap,
-          description: 'Manage subscription'
-        },
-        {
-          name: 'Reports',
-          href: '/dashboard/reports',
-          icon: 'BarChart3' as keyof typeof iconMap,
-          description: 'Business insights'
-        },
-        {
-          name: 'Settings',
-          href: '/dashboard/settings',
-          icon: 'Settings' as keyof typeof iconMap,
-          description: 'System settings'
-        }
-      ]
-    }
+  const baseLinks: NavLink[] = [
+    { name: 'Dashboard', href: '/dashboard', icon: 'dashboard', description: 'Overview of your company' },
+  ];
+
+  const teamManagerLinks: NavLink[] = [
+    { name: 'Customers', href: '/dashboard/customers', icon: 'customers', description: 'Manage your customers' },
+    { name: 'Work Orders', href: '/dashboard/work-orders', icon: 'workOrders', description: 'Manage work orders and tasks' },
+    { name: 'Team', href: '/dashboard/team', icon: 'team', description: 'Manage your team members' },
+    { name: 'Invoices', href: '/dashboard/invoices', icon: 'invoices', description: 'Track and manage invoices' },
+    { name: 'Reports', href: '/dashboard/reports', icon: 'reports', description: 'View company reports and analytics' },
+    { name: 'Billing', href: '/dashboard/billing', icon: 'billing', description: 'Manage your subscription and billing' },
+  ];
+
+  const fieldWorkerLinks: NavLink[] = [
+    { name: 'Work Orders', href: '/dashboard/work-orders', icon: 'workOrders', description: 'View and manage your assigned work orders' },
+    { name: 'Customers', href: '/dashboard/customers', icon: 'customers', description: 'View customer details and locations' },
+  ];
+
+  const soloOperatorLinks: NavLink[] = [
+    { name: 'Customers', href: '/dashboard/customers', icon: 'customers', description: 'Manage your customers' },
+    { name: 'Work Orders', href: '/dashboard/work-orders', icon: 'workOrders', description: 'Manage work orders and tasks' },
+    { name: 'Invoices', href: '/dashboard/invoices', icon: 'invoices', description: 'Track and manage invoices' },
+    { name: 'Reports', href: '/dashboard/reports', icon: 'reports', description: 'View company reports and analytics' },
+    { name: 'Billing', href: '/dashboard/billing', icon: 'billing', description: 'Manage your subscription and billing' },
+  ];
+
+  let links: NavLink[] = [];
+  let title = '';
+  let description = '';
+  let icon: keyof typeof iconMap = 'dashboard';
+  let color = 'text-primary';
+  let bgColor = 'bg-primary/20';
+
+  if (userExperience === UserExperience.TEAM_MANAGER) {
+    links = [...baseLinks, ...teamManagerLinks];
+    title = 'Team Manager';
+    description = 'Overview of your team and operations';
+    icon = 'team';
+    color = 'text-blue-500';
+    bgColor = 'bg-blue-500/20';
+  } else if (userExperience === UserExperience.FIELD_WORKER) {
+    links = [...baseLinks, ...fieldWorkerLinks];
+    title = 'Field Worker';
+    description = 'Overview of your assigned tasks';
+    icon = 'workOrders';
+    color = 'text-green-500';
+    bgColor = 'bg-green-500/20';
+  } else if (userExperience === UserExperience.SOLO_OPERATOR) {
+    links = [...baseLinks, ...soloOperatorLinks];
+    title = 'Solo Operator';
+    description = 'Overview of your business operations';
+    icon = 'solo';
+    color = 'text-purple-500';
+    bgColor = 'bg-purple-500/20';
+  } else if (userExperience === UserExperience.CLIENT) {
+    links = [
+      { name: 'Dashboard', href: '/dashboard', icon: 'dashboard', description: 'Overview of your services' },
+      { name: 'Work Orders', href: '/dashboard/work-orders', icon: 'workOrders', description: 'View your work orders' },
+      { name: 'Invoices', href: '/dashboard/invoices', icon: 'invoices', description: 'View your invoices' },
+    ];
+    title = 'Client Portal';
+    description = 'Manage your services and account';
+    icon = 'client';
+    color = 'text-yellow-500';
+    bgColor = 'bg-yellow-500/20';
+  }
+
+  return {
+    title,
+    description,
+    icon,
+    color,
+    bgColor,
+    links,
   };
-
-  return baseConfig[experience] || baseConfig.SOLO_OPERATOR;
 };

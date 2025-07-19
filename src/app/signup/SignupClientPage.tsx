@@ -108,23 +108,23 @@ export default function SignupForm() {
 
   const validateStep = (step: number): boolean => {
     switch (step) {
-      case 1:
-        return (
-          formData.fullName.trim().length > 0 &&
+    case 1:
+      return (
+        formData.fullName.trim().length > 0 &&
           formData.email.trim().length > 0 &&
           formData.password.length >= 6 && // Example: Minimum password length
           formData.password === formData.confirmPassword
-        );
-      case 2:
-        return (
-          formData.companyName.trim().length > 0 &&
+      );
+    case 2:
+      return (
+        formData.companyName.trim().length > 0 &&
           formData.companyEmail.trim().length > 0 &&
           formData.companyPhone.trim().length > 0
-        );
-      case 3:
-        return formData.selectedPlan !== undefined;
-      default:
-        return false;
+      );
+    case 3:
+      return formData.selectedPlan !== undefined;
+    default:
+      return false;
     }
   };
 

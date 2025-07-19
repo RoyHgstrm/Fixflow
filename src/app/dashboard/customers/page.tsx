@@ -20,12 +20,11 @@ import { CustomerDialogs } from "./_components/CustomerDialogs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
-import { api } from "@/trpc/react";
+import { trpc } from "@/trpc/react";
+import { RouterOutputs } from "@/trpc/react";
 
-// Extend CustomerWithRelations to include optional city
-type ExtendedCustomerWithRelations = CustomerWithRelations & {
-  city?: string;
-};
+// Extend CustomerWithRelations to include optional city and _count
+type ExtendedCustomerWithRelations = RouterOutputs["customer"]["list"]["items"][number];
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -61,7 +60,7 @@ export default function CustomersPage() {
     isLoading: customersLoading, 
     error: customersError, 
     refetch: refetchCustomers 
-  } = api.customer.list.useQuery({
+  } = trpc.customer.list.useQuery({
     search: searchQuery ?? undefined,
     limit: 50,
   }, {
@@ -76,7 +75,7 @@ export default function CustomersPage() {
     isLoading: statsLoading, 
     error: statsError,
     refetch: refetchStats 
-  } = api.customer.getStats.useQuery(undefined, {
+  } = trpc.customer.getStats.useQuery(undefined, {
     retry: 2,
     staleTime: 5 * 60 * 1000, // 5 minutes
     refetchOnWindowFocus: false,
@@ -101,7 +100,7 @@ export default function CustomersPage() {
   };
 
   // Filter customers based on search query (frontend filtering)
-  const customers: ExtendedCustomerWithRelations[] = customersData?.items ?? [];
+  const customers = customersData?.items ?? [];
   const filteredCustomers = customers.filter((customer: ExtendedCustomerWithRelations) => {
     const searchTerm = searchQuery.toLowerCase();
     return (
@@ -119,66 +118,44 @@ export default function CustomersPage() {
     residential: statsData?.residential ?? 0,
     commercial: statsData?.commercial ?? 0,
     industrial: statsData?.industrial ?? 0,
-    growth: {
-      total: {
-        isPositive: statsData?.growth?.total?.isPositive === true,
-        value: statsData?.growth?.total?.value ?? 0,
-        period: statsData?.growth?.total?.period ?? 'month',
-      },
-      residential: {
-        isPositive: statsData?.growth?.residential?.isPositive === true,
-        newCustomers: statsData?.growth?.residential?.newCustomers ?? 0,
-        period: statsData?.growth?.residential?.period ?? 'quarter',
-      },
-      commercial: {
-        isPositive: statsData?.growth?.commercial?.isPositive === true,
-        newCustomers: statsData?.growth?.commercial?.newCustomers ?? 0,
-        period: statsData?.growth?.commercial?.period ?? 'month',
-      },
-      industrial: {
-        isPositive: statsData?.growth?.industrial?.isPositive === true,
-        newCustomers: statsData?.growth?.industrial?.newCustomers ?? 0,
-        period: statsData?.growth?.industrial?.period ?? 'year',
-      },
-    },
   };
 
   // Role-based header content
   const getHeaderContent = () => {
     switch (userRole) {
-      case "ADMIN":
-        return {
-          title: "Customer Management",
-          description:
+    case "ADMIN":
+      return {
+        title: "Customer Management",
+        description:
             "View and manage all customer accounts, their work orders, and invoices.",
-          icon: Users,
-          bgColor: "from-blue-500/10",
-          color: "text-blue-500",
-        };
-      case "TECHNICIAN":
-        return {
-          title: "My Customers",
-          description: "View customers assigned to your work orders.",
-          icon: Users,
-          bgColor: "from-green-500/10",
-          color: "text-green-500",
-        };
-      case "CLIENT":
-        return {
-          title: "My Profile",
-          description: "Manage your personal information and service history.",
-          icon: User,
-          bgColor: "from-purple-500/10",
-          color: "text-purple-500",
-        };
-      default:
-        return {
-          title: "Customers",
-          description: "Manage customer information.",
-          icon: Users,
-          bgColor: "from-blue-500/10",
-          color: "text-blue-500",
-        };
+        icon: Users,
+        bgColor: "from-blue-500/10",
+        color: "text-blue-500",
+      };
+    case "TECHNICIAN":
+      return {
+        title: "My Customers",
+        description: "View customers assigned to your work orders.",
+        icon: Users,
+        bgColor: "from-green-500/10",
+        color: "text-green-500",
+      };
+    case "CLIENT":
+      return {
+        title: "My Profile",
+        description: "Manage your personal information and service history.",
+        icon: User,
+        bgColor: "from-purple-500/10",
+        color: "text-purple-500",
+      };
+    default:
+      return {
+        title: "Customers",
+        description: "Manage customer information.",
+        icon: Users,
+        bgColor: "from-blue-500/10",
+        color: "text-blue-500",
+      };
     }
   };
 

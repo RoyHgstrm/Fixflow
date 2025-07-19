@@ -1,8 +1,15 @@
+/* eslint-disable @typescript-eslint/strict-boolean-expressions */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable complexity */
+
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import type {
-  WorkOrderPriority} from "@/lib/types";
+import { WorkOrderStatus as PrismaWorkOrderStatus } from '@prisma/client';
 import {
+  WorkOrderPriority,
+  WorkOrderStatus,
+  CustomerType,
+  WorkOrderType, // Import WorkOrderType as value
   type WorkOrderBase,
   type WorkOrderWithRelations,
   type WorkOrderQueryFilters,
@@ -10,76 +17,58 @@ import {
   type WorkOrderResponse,
   type WorkOrderStats,
   type PaginatedResponse,
-  UserRole,
+  type UserRole,
+  USER_ROLES,
   type ExtendedUser,
-  WorkOrderStatus
 } from "@/lib/types";
 import {
   createTRPCRouter,
   protectedProcedure,
 } from "@/server/api/trpc";
 
-// Helper function to check user access
 const checkUserAccess = (userRole: UserRole, allowedRoles: UserRole[]) => {
   return allowedRoles.includes(userRole);
 };
 
-// Input schemas
 const listWorkOrdersSchema = z.object({
   limit: z.number().min(1).max(100).default(50),
   cursor: z.string().optional(),
-  status: z.enum(['PENDING', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']).optional(),
-  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
-  assignedToId: z.string().optional(),
-  customerId: z.string().optional(),
-  search: z.string().optional(),
+  status: z.nativeEnum(WorkOrderStatus).optional().nullable(),
+  priority: z.nativeEnum(WorkOrderPriority).optional().nullable(),
+  assignedToId: z.string().optional().nullable(),
+  customerId: z.string().optional().nullable(),
+  search: z.string().optional().nullable(),
 });
 
 const createWorkOrderSchema = z.object({
   title: z.string().min(1, 'Title is required'),
-  description: z.string().optional(),
-  customerId: z.string().min(1, 'Customer is required'),
-  assignedToId: z.string().optional(),
-  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).default('MEDIUM'),
-  estimatedHours: z.number().optional(),
-  amount: z.number().optional(),
-  location: z.string().optional(),
-  notes: z.string().optional(),
-  scheduledDate: z.date().optional(),
-});
-
-const updateWorkOrderSchema = z.object({
-  id: z.string().min(1, 'Work order ID is required'),
-  title: z.string().optional(),
   description: z.string().optional().nullable(),
-  status: z.enum(['PENDING', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']).optional(),
-  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
+  customerId: z.string().min(1, 'Customer is required'),
   assignedToId: z.string().optional().nullable(),
+  priority: z.nativeEnum(WorkOrderPriority).default(WorkOrderPriority.MEDIUM),
   estimatedHours: z.number().optional().nullable(),
   amount: z.number().optional().nullable(),
   location: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
   scheduledDate: z.date().optional().nullable(),
-  completedDate: z.date().optional().nullable(), // Add this line
+  type: z.nativeEnum(WorkOrderType).default(WorkOrderType.MAINTENANCE), // Use WorkOrderType enum
 });
 
-// Define specific types for work order-related operations
-type WorkOrderCreateInput = {
-  title: string;
-  customerId: string;
-  priority?: WorkOrderPriority;
-  description?: string;
-  amount?: number;
-  notes?: string;
-  estimatedHours?: number;
-  scheduledDate?: Date;
-  location?: string;
-  assignedToId?: string;
-};
-
-type WorkOrderUpdateInput = Partial<WorkOrderCreateInput> & {
-  id: string;
-};
+const updateWorkOrderSchema = z.object({
+  id: z.string().min(1, 'Work order ID is required'),
+  title: z.string().optional().nullable(),
+  description: z.string().optional().nullable(),
+  status: z.nativeEnum(WorkOrderStatus).optional().nullable(),
+  priority: z.nativeEnum(WorkOrderPriority).optional().nullable(),
+  assignedToId: z.string().optional().nullable(), // Ensure nullable and optional
+  estimatedHours: z.number().optional().nullable(),
+  amount: z.number().optional().nullable(),
+  location: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+  scheduledDate: z.date().optional().nullable(),
+  completedDate: z.date().optional().nullable(),
+  type: z.nativeEnum(WorkOrderType).optional().nullable(), // Use WorkOrderType enum
+});
 
 export const workOrderRouter = createTRPCRouter({
   list: protectedProcedure
@@ -87,54 +76,46 @@ export const workOrderRouter = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       const { limit, cursor, status, priority, assignedToId, customerId, search } = input;
       const userId = ctx.session.user.id;
-      const userRole = (ctx.session.user as any).role || UserRole.EMPLOYEE;
+      const userRole = ctx.session.user.role || USER_ROLES.EMPLOYEE;
 
       try {
-        // Build where clause
         const where: any = {
-          companyId: ctx.session.user.companyId, // Add companyId filter
+          companyId: ctx.session.user.companyId, 
         };
 
-        // Filter by status
         if (status) {
           where.status = status;
         }
-
-        // Filter by priority
         if (priority) {
           where.priority = priority;
         }
-
-        // Filter by assigned user
         if (assignedToId) {
           where.assignedToId = assignedToId;
         }
-
-        // Filter by customer
         if (customerId) {
           where.customerId = customerId;
         }
-
-        // Search in title and description
         if (search) {
           where.OR = [
             { title: { contains: search, mode: 'insensitive' } },
             { description: { contains: search, mode: 'insensitive' } },
+            { customer: { name: { contains: search, mode: 'insensitive' } } },
           ];
         }
 
-        // Role-based filtering
-        if (userRole === UserRole.EMPLOYEE || userRole === UserRole.TECHNICIAN) {
+        if (userRole === USER_ROLES.FIELD_WORKER || userRole === USER_ROLES.TECHNICIAN) {
           where.assignedToId = userId;
+        } else if (userRole === USER_ROLES.SOLO) {
+          where.createdById = userId;
+        } else if (userRole === USER_ROLES.CLIENT) {
+          where.customerId = userId;
         }
 
-        // Handle cursor-based pagination
         const cursorOptions = cursor ? { cursor: { id: cursor }, skip: 1 } : undefined;
 
-        // Fetch work orders
-        const workOrders = await ctx.db.workOrder.findMany({
+        const workOrders = await ctx.prisma.workOrder.findMany({
           ...cursorOptions,
-          where,
+          where: where,
           select: {
             id: true,
             title: true,
@@ -154,38 +135,15 @@ export const workOrderRouter = createTRPCRouter({
             customerId: true,
             assignedToId: true,
             createdById: true,
-            type: true, // Ensure type is selected
-            customer: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                phone: true,
-                address: true,
-              },
-            },
-            assignedTo: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-            createdBy: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
+            type: true,
+            customer: { select: { id: true, name: true, email: true, phone: true, address: true } },
+            assignedTo: { select: { id: true, name: true, email: true } },
+            createdBy: { select: { id: true, name: true, email: true } },
           },
-          orderBy: {
-            createdAt: 'desc',
-          },
+          orderBy: { createdAt: 'desc' },
           take: limit + 1,
         });
 
-        // Return paginated results
         const hasNextPage = workOrders.length > limit;
         const nextCursor = hasNextPage ? workOrders[workOrders.length - 1]?.id : undefined;
 
@@ -205,47 +163,44 @@ export const workOrderRouter = createTRPCRouter({
 
   getStats: protectedProcedure
     .query(async ({ ctx }) => {
-      const userId = ctx.session.user.id;
-      const userRole = (ctx.session.user as any).role || UserRole.EMPLOYEE;
+      const { user } = ctx.session;
+      const userRole = user.role || USER_ROLES.EMPLOYEE;
 
       try {
-        // Build where clause
         const where: any = {
-          companyId: ctx.session.user.companyId, // Add companyId filter
+          companyId: user.companyId,
         };
 
-        // Role-based filtering
-        if (userRole === UserRole.EMPLOYEE || userRole === UserRole.TECHNICIAN) {
-          where.assignedToId = userId;
+        if (userRole === USER_ROLES.FIELD_WORKER || userRole === USER_ROLES.TECHNICIAN) {
+          where.assignedToId = user.id;
+        } else if (userRole === USER_ROLES.SOLO) {
+          where.createdById = user.id;
+        } else if (userRole === USER_ROLES.CLIENT) {
+          where.customerId = user.id;
         }
 
-        // Get work order counts by status
-        const stats = await ctx.db.workOrder.groupBy({
+        const stats = await ctx.prisma.workOrder.groupBy({
           by: ['status'],
-          where,
+          where: where,
           _count: true,
         });
 
-        // Calculate total value from completed work orders
-        const totalValue = await ctx.db.workOrder.aggregate({
+        const totalValue = await ctx.prisma.workOrder.aggregate({
           where: {
             ...where,
-            status: 'COMPLETED',
+            status: PrismaWorkOrderStatus.COMPLETED,
             amount: { not: null },
           },
-          _sum: {
-            amount: true,
-          },
+          _sum: { amount: true },
         });
 
-        // Format stats
         const workOrderStats: WorkOrderStats = {
           total: stats.reduce((sum: number, stat: { _count: number }) => sum + stat._count, 0),
-          pending: stats.find((s: { status: WorkOrderStatus; _count: number }) => s.status === 'PENDING')?._count || 0,
-          assigned: stats.find((s: { status: WorkOrderStatus; _count: number }) => s.status === 'ASSIGNED')?._count || 0,
-          inProgress: stats.find((s: { status: WorkOrderStatus; _count: number }) => s.status === 'IN_PROGRESS')?._count || 0,
-          completed: stats.find((s: { status: WorkOrderStatus; _count: number }) => s.status === 'COMPLETED')?._count || 0,
-          cancelled: stats.find((s: { status: WorkOrderStatus; _count: number }) => s.status === 'CANCELLED')?._count || 0,
+          pending: stats.find((s: { status: PrismaWorkOrderStatus; _count: number }) => s.status === PrismaWorkOrderStatus.PENDING)?._count || 0,
+          assigned: stats.find((s: { status: PrismaWorkOrderStatus; _count: number }) => s.status === PrismaWorkOrderStatus.ASSIGNED)?._count || 0,
+          inProgress: stats.find((s: { status: PrismaWorkOrderStatus; _count: number }) => s.status === PrismaWorkOrderStatus.IN_PROGRESS)?._count || 0,
+          completed: stats.find((s: { status: PrismaWorkOrderStatus; _count: number }) => s.status === PrismaWorkOrderStatus.COMPLETED)?._count || 0,
+          cancelled: stats.find((s: { status: PrismaWorkOrderStatus; _count: number }) => s.status === PrismaWorkOrderStatus.CANCELLED)?._count || 0,
           totalValue: totalValue._sum.amount || 0,
         };
 
@@ -262,24 +217,25 @@ export const workOrderRouter = createTRPCRouter({
   getById: protectedProcedure
     .input(z.object({ id: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
-      const userId = ctx.session.user.id;
-      const userRole = (ctx.session.user as any).role || UserRole.EMPLOYEE;
+      const { user } = ctx.session;
+      const userRole = user.role || USER_ROLES.EMPLOYEE;
 
       try {
-        // Build where clause
         const where: any = {
           id: input.id,
-          companyId: ctx.session.user.companyId, // Add companyId filter
+          companyId: user.companyId, 
         };
 
-        // Role-based filtering
-        if (userRole === UserRole.EMPLOYEE || userRole === UserRole.TECHNICIAN) {
-          where.assignedToId = userId;
+        if (userRole === USER_ROLES.FIELD_WORKER || userRole === USER_ROLES.TECHNICIAN) {
+          where.assignedToId = user.id;
+        } else if (userRole === USER_ROLES.SOLO) {
+          where.createdById = user.id;
+        } else if (userRole === USER_ROLES.CLIENT) {
+          where.customerId = user.id;
         }
 
-        // Fetch work order
-        const workOrder = await ctx.db.workOrder.findFirst({
-          where,
+        const workOrder = await ctx.prisma.workOrder.findFirst({
+          where: where,
           select: {
             id: true,
             title: true,
@@ -299,30 +255,10 @@ export const workOrderRouter = createTRPCRouter({
             customerId: true,
             assignedToId: true,
             createdById: true,
-            type: true, // Ensure type is selected
-            customer: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                phone: true,
-                address: true,
-              },
-            },
-            assignedTo: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-            createdBy: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
+            type: true,
+            customer: { select: { id: true, name: true, email: true, phone: true, address: true } },
+            assignedTo: { select: { id: true, name: true, email: true } },
+            createdBy: { select: { id: true, name: true, email: true } },
           },
         });
 
@@ -347,24 +283,11 @@ export const workOrderRouter = createTRPCRouter({
     }),
 
   create: protectedProcedure
-    .input(
-      z.object({
-        title: z.string().min(2, 'Title must be at least 2 characters'),
-        customerId: z.string(),
-        priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).optional(),
-        description: z.string().optional(),
-        amount: z.number().optional(),
-        notes: z.string().optional(),
-        estimatedHours: z.number().optional(),
-        scheduledDate: z.date().optional(),
-        location: z.string().optional(),
-        assignedToId: z.string().optional(),
-      })
-    )
+    .input(createWorkOrderSchema)
     .mutation(async ({ ctx, input }) => {
-      // Validate user role
-      const userRole = ctx.session?.user?.role ?? 'EMPLOYEE';
-      if (!['OWNER', 'MANAGER', 'ADMIN'].includes(userRole)) {
+      const userRole = ctx.session?.user?.role || USER_ROLES.EMPLOYEE;
+
+      if (!checkUserAccess(userRole, [USER_ROLES.OWNER, USER_ROLES.MANAGER, USER_ROLES.ADMIN, USER_ROLES.SOLO])) {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'You do not have permission to create work orders',
@@ -372,17 +295,19 @@ export const workOrderRouter = createTRPCRouter({
       }
 
       try {
-        const workOrder = await ctx.db.workOrder.create({
+        const newWorkOrder = await ctx.prisma.workOrder.create({
           data: {
             ...input,
-            companyId: ctx.session.user.companyId!, // Non-null assertion
-            createdById: ctx.session.user.id, // Non-null assertion
-            status: 'PENDING' as WorkOrderStatus,
+            companyId: ctx.session.user.companyId || null,
+            createdById: ctx.session.user.id,
+            status: PrismaWorkOrderStatus.PENDING,
+            type: input.type || WorkOrderType.MAINTENANCE, // Use WorkOrderType enum
           },
         });
 
-        return workOrder;
+        return newWorkOrder;
       } catch (error) {
+        console.error('Failed to create work order:', error);
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to create work order',
@@ -394,30 +319,31 @@ export const workOrderRouter = createTRPCRouter({
   update: protectedProcedure
     .input(updateWorkOrderSchema)
     .mutation(async ({ ctx, input }) => {
-      const userId = ctx.session.user.id;
-      const userRole = (ctx.session.user as any).role || UserRole.EMPLOYEE;
+      const { user } = ctx.session;
+      const userRole = user.role || USER_ROLES.EMPLOYEE;
 
       try {
-        // Get existing work order
-        const workOrder = await ctx.db.workOrder.findUnique({
+        const existingWorkOrder = await ctx.prisma.workOrder.findUnique({
           where: {
             id: input.id,
-            companyId: ctx.session.user.companyId, // Add companyId filter
+            companyId: user.companyId, 
           },
+          select: { companyId: true, createdById: true, assignedToId: true, completedDate: true },
         });
 
-        if (!workOrder) {
+        if (!existingWorkOrder || existingWorkOrder.companyId !== user.companyId) {
           throw new TRPCError({
-            code: 'NOT_FOUND',
-            message: 'Work order not found',
+            code: 'FORBIDDEN',
+            message: 'You do not have access to this work order',
           });
         }
 
-        // Check permissions
-        const canUpdate = userRole === UserRole.OWNER ||
-          userRole === UserRole.MANAGER ||
-          userRole === UserRole.ADMIN ||
-          workOrder.assignedToId === userId;
+        const canUpdate = (userRole === USER_ROLES.OWNER ||
+          userRole === USER_ROLES.MANAGER ||
+          userRole === USER_ROLES.ADMIN ||
+          userRole === USER_ROLES.SOLO ||
+          (userRole === USER_ROLES.FIELD_WORKER && existingWorkOrder.assignedToId === user.id) ||
+          (userRole === USER_ROLES.TECHNICIAN && existingWorkOrder.assignedToId === user.id));
 
         if (!canUpdate) {
           throw new TRPCError({
@@ -426,40 +352,23 @@ export const workOrderRouter = createTRPCRouter({
           });
         }
 
-        // Update work order
-        const updatedWorkOrder = await ctx.db.workOrder.update({
+        if (userRole === USER_ROLES.FIELD_WORKER || userRole === USER_ROLES.TECHNICIAN) {
+          const allowedUpdates = ['status', 'notes', 'description', 'amount', 'estimatedHours', 'completedDate'];
+          const disallowedFields = Object.keys(input).filter(key => !allowedUpdates.includes(key) && key !== 'id');
+          if (disallowedFields.length > 0) {
+            throw new TRPCError({
+              code: 'FORBIDDEN',
+              message: `Field workers/technicians can only update status, notes, description, amount, estimated hours, and completed date. Attempted to update: ${disallowedFields.join(', ')}`,
+            });
+          }
+        }
+
+        const updatedWorkOrder = await ctx.prisma.workOrder.update({
           where: { id: input.id },
           data: {
             ...input,
-            id: undefined,
-            // Ensure completedDate is only set if status is completed
-            ...(input.status === WorkOrderStatus.COMPLETED && !workOrder.completedDate && { completedDate: new Date() }),
-            ...(input.status !== WorkOrderStatus.COMPLETED && workOrder.completedDate && { completedDate: null }),
-          },
-          include: {
-            customer: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                phone: true,
-                address: true,
-              },
-            },
-            assignedTo: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-            createdBy: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
+            ...(input.status === WorkOrderStatus.COMPLETED && !existingWorkOrder.completedDate && { completedDate: new Date() }),
+            ...(input.status !== WorkOrderStatus.COMPLETED && existingWorkOrder.completedDate && { completedDate: null }),
           },
         });
 
@@ -476,10 +385,10 @@ export const workOrderRouter = createTRPCRouter({
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const userRole = (ctx.session.user as any).role || UserRole.EMPLOYEE;
+      const { user } = ctx.session;
+      const userRole = user.role || USER_ROLES.EMPLOYEE;
 
-      // Only admins can delete work orders
-      if (!checkUserAccess(userRole, [UserRole.OWNER, UserRole.MANAGER, UserRole.ADMIN])) {
+      if (!checkUserAccess(userRole, [USER_ROLES.OWNER, USER_ROLES.MANAGER, USER_ROLES.ADMIN, USER_ROLES.SOLO])) {
         throw new TRPCError({
           code: 'FORBIDDEN',
           message: 'You do not have permission to delete work orders',
@@ -487,14 +396,23 @@ export const workOrderRouter = createTRPCRouter({
       }
 
       try {
-        await ctx.db.workOrder.delete({
+        const existingWorkOrder = await ctx.prisma.workOrder.findUnique({
           where: {
             id: input.id,
-            companyId: ctx.session.user.companyId, // Add companyId filter
+            companyId: user.companyId, 
           },
+          select: { companyId: true },
         });
 
-        return { success: true };
+        if (!existingWorkOrder || existingWorkOrder.companyId !== user.companyId) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: 'You do not have access to delete this work order',
+          });
+        }
+
+        await ctx.prisma.workOrder.delete({ where: { id: input.id } });
+        return { id: input.id };
       } catch (error) {
         console.error('Failed to delete work order:', error);
         throw new TRPCError({
@@ -503,4 +421,6 @@ export const workOrderRouter = createTRPCRouter({
         });
       }
     }),
-}); 
+});
+
+export default workOrderRouter; 

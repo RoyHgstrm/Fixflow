@@ -3,7 +3,7 @@ import { z } from "zod";
 import { createClient } from "@supabase/supabase-js";
 import { Database } from "@/lib/database.types";
 import { db } from "@/server/db";
-import { PlanType } from "@/lib/types";
+import { PlanType } from "@prisma/client";
 
 const signupCompanySchema = z.object({
   companyName: z.string().min(2, "Company name must be at least 2 characters"),

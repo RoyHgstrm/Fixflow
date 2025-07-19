@@ -1,162 +1,131 @@
 "use client";
 
-import {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  ReactNode
-} from 'react';
-import { Session, User } from '@supabase/supabase-js';
-import { UserRole, PlanType, SubscriptionStatus } from '../types';
-import { useAuthStateListener, signOut as supabaseSignOutClient } from '../supabase/client';
+import React, { createContext, useState, useContext, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { 
+  type CustomSession, 
+  type UserRole, 
+  USER_ROLES, 
+  SubscriptionStatus 
+} from '@/lib/types';
+import { createClientSupabaseClient } from '@/lib/supabase/client';
+import { getTrialDaysRemaining, isTrialEndingSoon } from '@/lib/utils';
 
-// Extended user type to include additional properties
-export type ExtendedUser = User & {
-  role?: UserRole;
-  company?: {
-    name: string;
-    id?: string;
-    planType?: PlanType;
-    subscription?: {
-      status: SubscriptionStatus;
-      trial_end: string | null;
-    };
-  };
-  name?: string;
-  image?: string;
-};
-
-// Custom session type to include role and optional extends
-export type CustomSession = {
-  user: ExtendedUser;
-  role?: UserRole;
-  expires?: string; // Make expires optional here
-  // These properties are part of Supabase's Session but are optional in CustomSession
-  // as they may not be available when deriving from a User object.
-  access_token?: string; 
-  refresh_token?: string; 
-  expires_in?: number; 
-  token_type?: string; 
-};
-
-// Context type definition
 type SessionContextType = {
   session: CustomSession | null;
   setSession: (session: CustomSession | null) => void;
   signOut: () => Promise<void>;
+  isLoading: boolean;
+  isAuthenticated: boolean;
+  userRole: UserRole | null;
+  isTrial: boolean;
+  trialDaysRemaining: number;
+  isTrialEndingSoon: boolean;
+  companyId: string | null;
+  companyName: string | null;
+  companyPlanType: string | null;
+  companySubscriptionStatus: SubscriptionStatus | null;
 };
 
-// Create the context with a default value
 const SessionContext = createContext<SessionContextType>({
   session: null,
-  setSession: () => { },
-  signOut: async () => { }
+  setSession: () => {},
+  signOut: async () => {},
+  isLoading: true,
+  isAuthenticated: false,
+  userRole: null,
+  isTrial: false,
+  trialDaysRemaining: 0,
+  isTrialEndingSoon: false,
+  companyId: null,
+  companyName: null,
+  companyPlanType: null,
+  companySubscriptionStatus: null,
 });
 
-// Helper function to get role label
-const getRoleLabel = (role: UserRole) => {
-  switch (role.toUpperCase()) {
-    case UserRole.OWNER: return 'Owner';
-    case UserRole.MANAGER: return 'Manager';
-    case UserRole.EMPLOYEE: return 'Employee';
-    case UserRole.ADMIN: return 'Administrator';
-    case UserRole.TECHNICIAN: return 'Technician';
-    case UserRole.CLIENT: return 'Client';
-    default: return 'User';
-  }
-};
+export function SessionProvider({ children }: { children: React.ReactNode }) {
+  const [session, setSession] = useState<CustomSession | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
 
-// Session Provider Component
-export function SessionProvider({
-  children,
-  initialSession
-}: {
-  children: ReactNode;
-  initialSession?: CustomSession | null
-}) {
-  const [session, setSession] = useState<CustomSession | null>(
-    initialSession ? {
-      user: {
-        ...initialSession.user,
-        role: initialSession.user.user_metadata?.role as UserRole,
-        company: initialSession.user.user_metadata?.company_name ? { 
-          name: initialSession.user.user_metadata.company_name,
-          id: initialSession.user.user_metadata.company_id,
-          planType: initialSession.user.user_metadata.plan_type as PlanType,
-          subscription: initialSession.user.user_metadata.subscription_status ? {
-            status: initialSession.user.user_metadata.subscription_status as SubscriptionStatus,
-            trial_end: initialSession.user.user_metadata.trial_end || null,
-          } : undefined,
-        } : undefined,
-      },
-      role: initialSession.user.user_metadata?.role as UserRole,
-      expires: initialSession.expires
-        ? initialSession.expires // expires is already an ISO string
-        : new Date(Date.now() + 60 * 60 * 1000).toISOString(), 
-      // Explicitly add session properties here if initialSession is a full Session object
-      access_token: initialSession.access_token,
-      refresh_token: initialSession.refresh_token,
-      expires_in: initialSession.expires_in,
-      token_type: initialSession.token_type,
-    } : null
-  );
+  const signOut = async () => {
+    const supabase = createClientSupabaseClient();
+    await supabase.auth.signOut();
+    setSession(null);
+    router.push('/login');
+  };
 
-  // Authentication state management
   useEffect(() => {
-    const unsubscribe = useAuthStateListener((newSession) => {
-      if (newSession !== null) {
-        setSession({
-          user: {
-            ...newSession.user,
-            role: newSession.role,
-            company: newSession.user.user_metadata?.company_name ? { 
-              name: newSession.user.user_metadata.company_name,
-              id: newSession.user.user_metadata.company_id,
-              planType: newSession.user.user_metadata.plan_type as PlanType,
-              subscription: newSession.user.user_metadata.subscription_status ? {
-                status: newSession.user.user_metadata.subscription_status as SubscriptionStatus,
-                trial_end: newSession.user.user_metadata.trial_end || null,
-              } : undefined,
-            } : undefined
-          },
-          role: newSession.role,
-          expires: newSession.user.aud ? new Date(Date.now() + 60 * 60 * 1000).toISOString() : undefined, // Provide a default or adjust based on your logic
-        });
-      } else {
-        setSession(null);
+    const supabase = createClientSupabaseClient();
+    
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'SIGNED_IN' && session) {
+          setSession(session as CustomSession);
+        } else if (event === 'SIGNED_OUT') {
+          setSession(null);
+        }
+        setIsLoading(false);
       }
-    });
+    );
 
-    return () => unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  // Sign out function
-  const signOut = async () => {
-    await supabaseSignOutClient();
-    setSession(null);
-    window.location.href = '/login';
+  const companySubscriptionStatus = session?.user?.company?.subscription?.status;
+  const trialEndDate = session?.user?.company?.subscription?.trial_end;
+
+  const isTrial = companySubscriptionStatus === SubscriptionStatus.TRIAL;
+  const trialDaysRemaining = trialEndDate ? getTrialDaysRemaining(new Date(trialEndDate)) : 0;
+  const isTrialEndingSoonFlag = trialEndDate ? isTrialEndingSoon(new Date(trialEndDate)) : false;
+
+  const contextValue: SessionContextType = {
+    session,
+    setSession,
+    signOut,
+    isLoading,
+    isAuthenticated: !!session,
+    userRole: session?.user?.role ?? null,
+    isTrial,
+    trialDaysRemaining,
+    isTrialEndingSoon: isTrialEndingSoonFlag,
+    companyId: session?.user?.companyId ?? null,
+    companyName: session?.user?.company?.name ?? null,
+    companyPlanType: session?.user?.company?.planType ?? null,
+    companySubscriptionStatus: companySubscriptionStatus ?? null,
   };
 
   return (
-    <SessionContext.Provider value={{ session, setSession, signOut }}>
+    <SessionContext.Provider value={contextValue}>
       {children}
     </SessionContext.Provider>
   );
 }
 
-// Custom hook to use session context
 export function useSession() {
-  const context = useContext(SessionContext);
-
-  if (context === null) {
-    throw new Error('useSession must be used within a SessionProvider');
-  }
-
-  return context;
+  return useContext(SessionContext);
 }
 
-// Utility function to get role label (can be used outside of React components)
+export function getRoleLabel(role?: UserRole): string {
+  const roleLabels: Record<UserRole, string> = {
+    [USER_ROLES.SOLO]: 'Solo Operator',
+    [USER_ROLES.TEAM]: 'Team Member',
+    [USER_ROLES.BUSINESS]: 'Business User',
+    [USER_ROLES.ENTERPRISE]: 'Enterprise User',
+    [USER_ROLES.FIELD_WORKER]: 'Field Worker',
+    [USER_ROLES.CLIENT]: 'Client',
+    [USER_ROLES.ADMIN]: 'Administrator',
+    [USER_ROLES.OWNER]: 'Company Owner',
+    [USER_ROLES.MANAGER]: 'Manager',
+    [USER_ROLES.EMPLOYEE]: 'Employee',
+    [USER_ROLES.TECHNICIAN]: 'Technician',
+  };
+
+  return role ? roleLabels[role] : 'Unknown Role';
+}
+
 export function getSessionRoleLabel(role?: UserRole): string {
-  return role ? getRoleLabel(role) : 'User';
+  return getRoleLabel(role);
 } 

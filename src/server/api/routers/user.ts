@@ -1,12 +1,14 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { UserRole, PlanType } from "@/lib/types";
-import { supabaseAdmin } from "@/lib/supabase";
-
+import { type UserRole, USER_ROLES, type UserWithRole } from "@/lib/types";
 import {
   createTRPCRouter,
   protectedProcedure,
 } from "@/server/api/trpc";
+
+const checkUserAccess = (userRole: UserRole, allowedRoles: UserRole[]) => {
+  return allowedRoles.includes(userRole);
+};
 
 // Input schemas
 const updateUserProfileSchema = z.object({
@@ -30,11 +32,11 @@ const updateCompanyInfoSchema = z.object({
 });
 
 const updateNotificationSettingsSchema = z.object({
-  emailNotifications: z.boolean().optional(),
-  workOrderUpdates: z.boolean().optional(),
-  teamUpdates: z.boolean().optional(),
-  systemUpdates: z.boolean().optional(),
-  marketingEmails: z.boolean().optional(),
+  emailNotifications: z.boolean(),
+  workOrderUpdates: z.boolean(),
+  teamUpdates: z.boolean(),
+  systemUpdates: z.boolean(),
+  marketingEmails: z.boolean(),
 });
 
 const changePasswordSchema = z.object({
@@ -43,87 +45,68 @@ const changePasswordSchema = z.object({
 });
 
 export const userRouter = createTRPCRouter({
-  // Get current user's profile and company information
-  getSettingsData: protectedProcedure
-    .query(async ({ ctx }) => {
-      const userId = ctx.session.user.id;
+  // Get current user details
+  getMe: protectedProcedure.query(async ({ ctx }) => {
+    const { user } = ctx.session;
+    if (!user) {
+      throw new TRPCError({ code: "UNAUTHORIZED" });
+    }
 
-      try {
-        const user = await ctx.db.user.findUnique({
-          where: { id: userId },
-          include: {
-            company: true,
-          },
-        });
+    const userProfile = await ctx.prisma.user.findUnique({
+      where: { id: user.id },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        companyId: true,
+        company: { 
+          select: { 
+            id: true, 
+            name: true, 
+            planType: true, 
+            subscriptionStatus: true, 
+            trialEndDate: true 
+          } 
+        },
+      },
+    });
 
-        if (!user) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "User not found",
-          });
-        }
+    if (!userProfile) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "User profile not found" });
+    }
 
-        // Mock notification settings for now, as they are not in DB schema
-        const notificationSettings = {
-          emailNotifications: true,
-          workOrderUpdates: true,
-          teamUpdates: true,
-          systemUpdates: false,
-          marketingEmails: false,
-        };
-
-        return {
-          profile: {
-            name: user.name,
-            email: user.email,
-            phone: user.phone,
-            jobTitle: user.jobTitle,
-            image: user.image,
-            role: user.role,
-          },
-          company: user.company ? {
-            id: user.company.id,
-            name: user.company.name,
-            email: user.company.email,
-            phone: user.company.phone,
-            address: user.company.address,
-            city: user.company.city,
-            state: user.company.state,
-            zipCode: user.company.zipCode,
-            website: user.company.website,
-            industry: user.company.industry,
-            planType: user.company.planType,
-            subscriptionStatus: user.company.subscriptionStatus,
-          } : null,
-          notificationSettings,
-        };
-      } catch (error) {
-        console.error("Error fetching user settings data:", error);
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Failed to fetch settings data",
-        });
-      }
-    }),
+    return userProfile;
+  }),
 
   // Update user profile
   updateProfile: protectedProcedure
-    .input(updateUserProfileSchema)
+    .input(
+      z.object({
+        name: z.string().min(1).optional(),
+        email: z.string().email().optional(),
+        jobTitle: z.string().optional().nullable(),
+      })
+    )
     .mutation(async ({ ctx, input }) => {
-      const userId = ctx.session.user.id;
+      const { user } = ctx.session;
+      if (!user) {
+        throw new TRPCError({ code: "UNAUTHORIZED" });
+      }
 
       try {
-        const updatedUser = await ctx.db.user.update({
-          where: { id: userId },
-          data: input,
+        const updatedUser = await ctx.prisma.user.update({
+          where: { id: user.id },
+          data: {
+            name: input.name,
+            email: input.email,
+            jobTitle: input.jobTitle,
+          },
         });
-
-        // Optionally update session if needed
-        // await ctx.session.update({ user: { ...ctx.session.user, name: updatedUser.name, email: updatedUser.email } });
 
         return updatedUser;
       } catch (error) {
-        console.error("Error updating user profile:", error);
+        console.error("Failed to update user profile:", error);
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Failed to update profile",
@@ -155,7 +138,7 @@ export const userRouter = createTRPCRouter({
       }
 
       try {
-        const updatedCompany = await ctx.db.company.update({
+        const updatedCompany = await ctx.prisma.company.update({
           where: { id: companyId },
           data: input,
         });
@@ -170,15 +153,37 @@ export const userRouter = createTRPCRouter({
       }
     }),
 
-  // Update notification settings (mocked for now as no DB table)
+  // Update notification settings
   updateNotifications: protectedProcedure
     .input(updateNotificationSettingsSchema)
     .mutation(async ({ ctx, input }) => {
-      // In a real application, you would save these to a user_settings table or similar
-      console.log("Updating notification settings (mocked):");
-      console.log(input);
+      const userId = ctx.session.user.id;
 
-      return { success: true, message: "Notification settings updated successfully (mocked)" };
+      try {
+        const existingSettings = await ctx.prisma.userNotificationSettings.findUnique({
+          where: { userId: userId },
+        });
+
+        let updatedSettings;
+        if (existingSettings) {
+          updatedSettings = await ctx.prisma.userNotificationSettings.update({
+            where: { userId: userId },
+            data: input,
+          });
+        } else {
+          updatedSettings = await ctx.prisma.userNotificationSettings.create({
+            data: { userId: userId, ...input },
+          });
+        }
+
+        return updatedSettings;
+      } catch (error) {
+        console.error("Error updating notification settings:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to update notification settings",
+        });
+      }
     }),
 
   // Change user password
@@ -188,21 +193,15 @@ export const userRouter = createTRPCRouter({
       const userId = ctx.session.user.id;
 
       try {
-        // Fetch current user from Supabase Auth to verify current password (if needed by your Supabase setup)
-        // Supabase's update method usually handles current password verification internally.
-        // If your Supabase setup requires explicit current password validation, you might fetch user by ID
-        // and then compare password hashes, or use a specific Supabase function for that.
-
-        // Directly attempt to update password via Supabase Admin API
-        const { data, error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
-          password: input.newPassword,
+        const { data, error } = await ctx.prisma.user.update({
+          where: { id: userId },
+          data: { password: input.newPassword },
         });
 
         if (error) {
-          console.error("Supabase password update error:", error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
-            message: error.message || "Failed to change password",
+            message: error.message || "Failed to change password in Supabase Auth",
           });
         }
 
@@ -211,8 +210,59 @@ export const userRouter = createTRPCRouter({
         console.error("Error changing password:", error);
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
-          message: "Failed to change password",
+          message: (error as Error).message || "Failed to change password",
         });
       }
     }),
-}); 
+
+  // Change user role (admin/owner only)
+  changeUserRole: protectedProcedure
+    .input(
+      z.object({
+        userId: z.string().min(1),
+        newRole: z.nativeEnum(USER_ROLES), // Use USER_ROLES for validation
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const currentUserRole = ctx.session.user.role || USER_ROLES.EMPLOYEE;
+      const currentCompanyId = ctx.session.user.companyId;
+
+      // Only OWNER or ADMIN can change user roles
+      if (!checkUserAccess(currentUserRole, [USER_ROLES.OWNER, USER_ROLES.ADMIN])) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Insufficient permissions" });
+      }
+
+      try {
+        const userToUpdate = await ctx.prisma.user.findUnique({
+          where: { id: input.userId, companyId: currentCompanyId },
+        });
+
+        if (!userToUpdate) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "User not found in this company" });
+        }
+
+        // Prevent changing own role or owner's role by non-owner admin
+        if (userToUpdate.id === ctx.session.user.id && currentUserRole !== USER_ROLES.OWNER) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Cannot change your own role" });
+        }
+        if (userToUpdate.role === USER_ROLES.OWNER && currentUserRole !== USER_ROLES.OWNER) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Only the owner can change another owner's role" });
+        }
+
+        const updatedUser = await ctx.prisma.user.update({
+          where: { id: input.userId },
+          data: { role: input.newRole },
+        });
+
+        return updatedUser;
+      } catch (error) {
+        console.error("Failed to change user role:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to change user role",
+        });
+      }
+    }),
+});
+
+export default userRouter; 
