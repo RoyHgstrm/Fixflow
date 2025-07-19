@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useSession } from 'next-auth/react';
+import { useSession } from '@/lib/providers/session-provider';
 import { nanoid } from 'nanoid';
 import {
   X,

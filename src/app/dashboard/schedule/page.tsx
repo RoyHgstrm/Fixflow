@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { useSession } from 'next-auth/react';
+import { useSession } from "@/lib/providers/session-provider";
 import { 
   Calendar, 
   CalendarDays, 
@@ -88,7 +88,7 @@ const priorityColors = {
 };
 
 export default function SchedulePage() {
-  const { data: session } = useSession();
+  const { session } = useSession();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
   const [searchQuery, setSearchQuery] = useState('');
@@ -96,7 +96,7 @@ export default function SchedulePage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const router = useRouter();
 
-  const userRole = (session?.user as any)?.role || UserRole.EMPLOYEE;
+  const userRole = session?.user?.role || UserRole.EMPLOYEE;
   const canCreateWorkOrders = [UserRole.OWNER, UserRole.MANAGER, UserRole.ADMIN].includes(userRole);
 
   // Get work orders for the current month
@@ -144,9 +144,12 @@ export default function SchedulePage() {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
     const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
     const startDate = new Date(firstDay);
-    startDate.setDate(startDate.getDate() - firstDay.getDay());
+    
+    // Adjust to make the week start on Monday
+    const dayOfWeek = firstDay.getDay(); // 0=Sun, 1=Mon, ...
+    const offset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    startDate.setDate(startDate.getDate() - offset);
 
     const days = [];
     const current = new Date(startDate);
@@ -305,7 +308,7 @@ export default function SchedulePage() {
             {/* Calendar Grid */}
             <div className="grid grid-cols-7 gap-2">
               {/* Week headers */}
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
                 <div key={day} className="p-2 text-center text-sm font-medium text-muted-foreground">
                   {day}
                 </div>

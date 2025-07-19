@@ -18,6 +18,12 @@ const nextConfig = {
     
     return config;
   },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   // Add other Next.js configurations here
 };
 

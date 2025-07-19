@@ -22,18 +22,23 @@ interface ErrorBoundaryProps {
 // Error logging service
 class ErrorLogger {
   static log(error: Error, errorInfo?: React.ErrorInfo, context?: string) {
-    // In production, send to logging service (e.g., Sentry, LogRocket)
-    console.error('Error Boundary caught an error:', {
-      error,
-      errorInfo,
-      context,
+    // Safely extract error details
+    const errorDetails = {
+      name: error.name || 'Unknown Error',
+      message: error.message || 'No error message',
+      stack: error.stack || 'No stack trace',
+      context: context || 'No context provided',
       timestamp: new Date().toISOString(),
-      userAgent: navigator.userAgent,
-      url: window.location.href,
-    });
+      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'Unknown',
+      url: typeof window !== 'undefined' ? window.location.href : 'Unknown',
+      errorInfo: errorInfo ? JSON.stringify(errorInfo) : 'No additional error info'
+    };
 
-    // Here you would typically send to your error tracking service
-    // Example: Sentry.captureException(error, { extra: { errorInfo, context } });
+    // Log to console with structured error details
+    console.error('Error Boundary caught an error:', errorDetails);
+
+    // Optional: Send to error tracking service
+    // Example: Sentry.captureException(error, { extra: errorDetails });
   }
 }
 

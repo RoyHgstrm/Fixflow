@@ -1,26 +1,44 @@
-import { 
-  UserRole, 
-  WorkOrderStatus, 
-  WorkOrderPriority, 
-  InvoiceStatus, 
-  CustomerType,
-  PlanType,
-  InvitationStatus
-} from '@prisma/client';
 import { type Session } from '@supabase/supabase-js';
 import { User } from '@supabase/supabase-js';
 
-export { 
-  UserRole, 
-  WorkOrderStatus, 
-  WorkOrderPriority, 
-  InvoiceStatus, 
-  CustomerType,
-  PlanType,
-  InvitationStatus
-};
+// Explicitly define enums that were previously imported from @prisma/client
+export enum UserRole {
+  OWNER = 'OWNER',
+  MANAGER = 'MANAGER',
+  EMPLOYEE = 'EMPLOYEE',
+  ADMIN = 'ADMIN',
+  TECHNICIAN = 'TECHNICIAN',
+  CLIENT = 'CLIENT',
+}
 
-// Explicitly define WorkOrderType enum as it may not be correctly exported or recognized
+export enum WorkOrderStatus {
+  PENDING = 'PENDING',
+  ASSIGNED = 'ASSIGNED',
+  IN_PROGRESS = 'IN_PROGRESS',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+}
+
+export enum WorkOrderPriority {
+  LOW = 'LOW',
+  MEDIUM = 'MEDIUM',
+  HIGH = 'HIGH',
+  URGENT = 'URGENT',
+}
+
+export enum CustomerType {
+  RESIDENTIAL = 'RESIDENTIAL',
+  COMMERCIAL = 'COMMERCIAL',
+  INDUSTRIAL = 'INDUSTRIAL',
+}
+
+export enum InvitationStatus {
+  PENDING = 'PENDING',
+  ACCEPTED = 'ACCEPTED',
+  DECLINED = 'DECLINED',
+  EXPIRED = 'EXPIRED',
+}
+
 export enum WorkOrderType {
   INSTALLATION = 'INSTALLATION',
   MAINTENANCE = 'MAINTENANCE',
@@ -31,6 +49,28 @@ export enum WorkOrderType {
 }
 
 // Plan configuration
+export enum PlanType {
+  SOLO = 'SOLO',
+  TEAM = 'TEAM',
+  BUSINESS = 'BUSINESS',
+  ENTERPRISE = 'ENTERPRISE',
+}
+
+export enum SubscriptionStatus {
+  TRIAL = 'TRIAL',
+  ACTIVE = 'ACTIVE',
+  PAST_DUE = 'PAST_DUE',
+  CANCELLED = 'CANCELLED',
+  EXPIRED = 'EXPIRED'
+}
+
+export enum InvoiceStatus {
+  DRAFT = 'DRAFT',
+  PENDING = 'PENDING',
+  PAID = 'PAID',
+  OVERDUE = 'OVERDUE',
+}
+
 export interface PlanFeatures {
   name: string;
   price: number;
@@ -250,16 +290,13 @@ export function formatTrialEndDate(trialEndDate: Date | string): string {
   });
 }
 
-// Result type for error handling
 export type Result<T, E = Error> =
   | { success: true; data: T }
   | { success: false; error: E };
 
-// Helper functions for Result type
 export const success = <T>(data: T): Result<T> => ({ success: true, data });
 export const failure = <E>(error: E): Result<never, E> => ({ success: false, error });
 
-// API Error types
 export enum ApiErrorCode {
   UNAUTHORIZED = 'UNAUTHORIZED',
   FORBIDDEN = 'FORBIDDEN',
@@ -275,7 +312,6 @@ export interface ApiError {
   details?: unknown;
 }
 
-// Enhanced session type with proper typing
 export interface ExtendedUser extends User {
   role?: UserRole;
   companyId?: string | null; // Add companyId here
@@ -299,7 +335,6 @@ export interface CustomSession {
   token_type?: string; 
 }
 
-// Work Order types
 export interface WorkOrderBase {
   id: string;
   title: string;
@@ -326,7 +361,7 @@ export interface WorkOrderWithRelations extends WorkOrderBase {
     name: string;
     email?: string;
     phone?: string;
-    address?: string | null; // Add address field
+    address?: string | null;
   };
   assignedTo?: {
     id: string;
@@ -338,10 +373,9 @@ export interface WorkOrderWithRelations extends WorkOrderBase {
     name: string;
     email: string;
   };
-  invoices?: InvoiceWithRelations[]; // Add this line
+  invoices?: InvoiceWithRelations[];
 }
 
-// Customer types
 export interface CustomerBase {
   id: string;
   name: string;
@@ -379,7 +413,6 @@ export interface CustomerWithRelations extends CustomerBase {
   invoices?: InvoiceWithRelations[];
 }
 
-// Invoice types
 export interface InvoiceData {
   id: string;
   number: string;
@@ -409,7 +442,6 @@ export interface InvoiceWithRelations extends InvoiceData {
   };
 }
 
-// API Response types
 export interface PaginatedResponse<T> {
   items: T[];
   nextCursor?: string;
@@ -428,7 +460,7 @@ export interface WorkOrderResponse extends WorkOrderBase {
     id: string;
     name: string;
     email: string;
-  } | null; // Allow null for assignedTo
+  } | null;
   createdBy: {
     id: string;
     name: string;
@@ -446,7 +478,6 @@ export interface WorkOrderStats {
   totalValue?: number;
 }
 
-// Navigation and UI types
 export interface NavigationItem {
   name: string;
   href: string;
@@ -464,7 +495,6 @@ export interface DashboardMetric {
   icon?: React.ComponentType<{ className?: string }>;
 }
 
-// Form types
 export interface WorkOrderCreateData {
   title: string;
   description?: string;
@@ -489,7 +519,6 @@ export interface CustomerCreateData {
   notes?: string;
 }
 
-// Search and Filter types
 export interface BaseFilters {
   search?: string;
   limit?: number;
@@ -515,7 +544,6 @@ export interface InvoiceQueryFilters extends BaseFilters {
   workOrderId?: string;
 }
 
-// Analytics and Stats types
 export interface WorkOrderAnalytics {
   total: number;
   pending: number;
@@ -546,7 +574,6 @@ export interface InvoiceAnalytics {
   pendingAmount: number;
 }
 
-// Component prop types
 export interface StatusBadgeProps {
   status: WorkOrderStatus | InvoiceStatus;
   variant?: 'default' | 'outline';
@@ -557,7 +584,6 @@ export interface PriorityBadgeProps {
   variant?: 'default' | 'outline';
 }
 
-// Error types for better error handling
 export interface FieldError {
   field: string;
   message: string;
@@ -568,7 +594,6 @@ export interface ValidationErrors {
   general?: string;
 }
 
-// Map types
 export interface MapLocation {
   id: string;
   name: string;
@@ -586,35 +611,34 @@ export interface MapBounds {
   west: number;
 }
 
-// Utility type helpers
 export type RequiredFields<T, K extends keyof T> = T & Required<Pick<T, K>>;
 export type OptionalFields<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 export type CreateInput<T> = Omit<T, 'id' | 'createdAt' | 'updatedAt'>;
 export type UpdateInput<T> = Partial<Omit<T, 'id' | 'createdAt' | 'updatedAt'>>;
 
-// Type aliases that avoid conflicts with existing declarations
 export type SafeWorkOrderWithRelations = WorkOrderWithRelations;
 export type SafeCustomerWithRelations = CustomerWithRelations;
 export type SafeInvoiceWithRelations = InvoiceWithRelations; 
 
 export type PaymentMethod = {
   id: string;
-  type: 'card' | 'bank';
+  type: string; // Relaxed type to string
   last4: string;
-  brand?: string;
-  expiryMonth?: number;
-  expiryYear?: number;
+  brand?: string | null; // Allow null
+  expiryMonth?: number | null; // Allow null
+  expiryYear?: number | null; // Allow null
   isDefault: boolean;
 };
 
 export type Invoice = {
   id: string;
+  number?: string; 
   date: Date;
   amount: number;
-  status: 'paid' | 'pending' | 'failed';
+  status: InvoiceStatus;
   planName: string;
   downloadUrl?: string;
-}; 
+};
 
 export type CustomerStats = {
   totalCustomers: number;
@@ -645,16 +669,7 @@ export type CustomerStats = {
   };
 };
 
-// Add a utility type for Next.js page props
 export type NextPageProps<T extends { id: string }> = {
   params: T & { then?: never };
   searchParams?: { [key: string]: string | string[] | undefined };
 }; 
-
-export enum SubscriptionStatus {
-  TRIAL = 'TRIAL',
-  ACTIVE = 'ACTIVE',
-  PAST_DUE = 'PAST_DUE',
-  CANCELLED = 'CANCELLED',
-  EXPIRED = 'EXPIRED'
-} 

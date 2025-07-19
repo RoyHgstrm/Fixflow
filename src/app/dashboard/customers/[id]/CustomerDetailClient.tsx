@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/trpc/react";
 import {
@@ -29,11 +29,12 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
-import { CustomerType, type CustomerWithRelations, type WorkOrderWithRelations, type InvoiceWithRelations } from "@/lib/types";
+import { CustomerType, WorkOrderStatus, type CustomerWithRelations, type WorkOrderWithRelations, type InvoiceWithRelations } from "@/lib/types";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { getStatusColor, getStatusIcon } from "@/lib/utils"; // Import utils for work order status
 import { CustomSession } from "@/lib/providers/session-provider";
+import * as React from "react"; // Changed to import all as React
 
 interface CustomerDetailClientProps {
   customerId: string;
@@ -74,9 +75,9 @@ export function CustomerDetailClient({ customerId, session }: CustomerDetailClie
   const [isEditing, setIsEditing] = useState(false);
   const [editedCustomer, setEditedCustomer] = useState<EditedCustomerType | null>(null);
 
-  // Get user role for permission checks
-  const userRole = session?.user?.role || 'ADMIN';
-  const canEdit = userRole === 'ADMIN' || userRole === 'OWNER' || userRole === 'MANAGER';
+  // Safely extract user role
+  const userRole = session?.user?.role ?? 'CLIENT';
+  const canEdit = ['ADMIN', 'OWNER', 'MANAGER'].includes(userRole);
 
   // Set dynamic page title
   usePageTitle(userRole);
@@ -113,28 +114,43 @@ export function CustomerDetailClient({ customerId, session }: CustomerDetailClie
     }
   }, [customer]);
 
-  // Update mutation
+  // Define the update mutation inside the component
   const updateCustomerMutation = api.customer.update.useMutation({
     onSuccess: async () => {
       toast.success("Customer updated successfully!");
       setIsEditing(false);
       await refetch(); // Refetch to get latest data
     },
-    onError: (err) => {
+    onError: (err: { message: string }) => {
       toast.error(`Failed to update customer: ${err.message}`);
     },
   });
 
+  // Modify status icon rendering to ensure ReactNode compatibility
+  const renderStatusIcon = (status: WorkOrderStatus) => {
+    const Icon = getStatusIcon(status);
+    return React.createElement(Icon, { className: 'w-4 h-4 text-muted-foreground' });
+  };
+
+  // Handle save edit
   const handleSaveEdit = async () => {
     if (!editedCustomer) return;
 
     try {
       await updateCustomerMutation.mutateAsync({
         id: customerId,
-        ...editedCustomer,
+        name: editedCustomer.name,
+        email: editedCustomer.email,
+        phone: editedCustomer.phone,
+        address: editedCustomer.address,
+        city: editedCustomer.city,
+        state: editedCustomer.state,
+        zipCode: editedCustomer.zipCode,
+        type: editedCustomer.type,
+        notes: editedCustomer.notes,
       });
     } catch (error) {
-      console.error("Error updating customer:", error);
+      console.error('Error updating customer:', error);
     }
   };
 
@@ -177,10 +193,11 @@ export function CustomerDetailClient({ customerId, session }: CustomerDetailClie
     );
   }
 
+  // Modify CustomerTypeIcon to handle potential undefined case
   const CustomerTypeIcon =
-    customer.type === CustomerType.RESIDENTIAL
+    customer?.type === CustomerType.RESIDENTIAL
       ? Home
-      : customer.type === CustomerType.COMMERCIAL
+      : customer?.type === CustomerType.COMMERCIAL
         ? Building2
         : Factory;
 
@@ -480,7 +497,9 @@ export function CustomerDetailClient({ customerId, session }: CustomerDetailClie
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      {getStatusIcon(workOrder.status)}
+                      {/* Modify status icon rendering to ensure ReactNode compatibility */}
+                      {/* In the render method, replace the icon rendering */}
+                      {renderStatusIcon(workOrder.status)}
                       <span className={`text-sm font-medium ${getStatusColor(workOrder.status)}`}>
                         {workOrder.status.replace('_', ' ')}
                       </span>

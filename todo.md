@@ -151,6 +151,7 @@
 - [ ] 🌈 Enhance OAuth provider options (GitHub, Microsoft, etc.)
 - [ ] 🔐 Implement advanced password complexity rules
 - [ ] 🌐 Add support for additional social login providers
+- [x] Create README.md with project info and tech stack
 
 ## Security Enhancements
 
@@ -241,3 +242,80 @@
   - Ensured clean default export
   - Resolved potential import conflicts
   - Verified component rendering in dashboard layout
+
+## Session Provider Migration
+
+### Completed Tasks
+- [x] Replace NextAuth `useSession` with custom session provider in `schedule/page.tsx`
+
+### Pending Tasks
+- [x] Remove NextAuth dependencies from `package.json`
+- [x] Update all components using `useSession` from NextAuth
+- [x] Remove NextAuth configuration files
+- [ ] Ensure all authentication flows use custom session provider
+- [x] Update authentication middleware to use custom session provider
+- [x] Test all authentication-related functionality
+- [x] Implement comprehensive E2E test suite
+
+### Notes
+- Ensure smooth transition from NextAuth to custom Supabase-based session management
+- Verify role-based access control works correctly
+- Check session persistence and token management
+
+## Type Resolution and Promise Handling
+
+### Completed Tasks
+- [x] Remove Promise type from `CustomerDetailPage` params
+- [x] Simplify metadata generation in `CustomerDetailPage`
+- [x] Resolve Promise-related rendering issues
+
+### Pending Tasks
+- [ ] Review other page components for similar Promise-related rendering issues
+- [ ] Standardize page component type definitions
+- [ ] Ensure consistent type handling across server components
+- [ ] Add type safety checks for dynamic route parameters
+
+### Notes
+- Promises in page component parameters can cause rendering issues
+- Always resolve Promises before rendering or passing to client components
+- Use type guards and safe type conversions when working with dynamic routes
+
+## Session and Customer Data Rendering
+
+### Completed Tasks
+- [x] Improve session data rendering safety
+- [x] Add null checks for customer type rendering
+- [x] Enhance error handling in customer update mutation
+
+### Pending Tasks
+- [ ] Review all components for potential rendering issues with session data
+- [ ] Implement comprehensive type guards for session and user data
+- [ ] Create a utility function for safe role-based access checks
+- [ ] Add more robust error handling for data fetching and mutations
+
+### Notes
+- Ensure consistent handling of optional and nullable properties
+- Implement defensive programming techniques for data rendering
+- Prioritize type safety and predictable rendering behavior
+
+## React Hook Call Issues
+
+### Completed Tasks
+- [x] Ensure `updateCustomerMutation` and `renderStatusIcon` are defined within `CustomerDetailClient` functional component
+- [x] Verify `updateCustomerMutation.mutateAsync` input matches `CustomerUpdateInput` schema
+- [x] Update `src/server/api/routers/customer.ts` to include `city`, `state`, `zipCode`, and `type` in `CustomerUpdateInput`
+- [x] Clean and reinstall `node_modules` to resolve potential duplicate React instances or module resolution issues.
+- [x] Next.js 15 `params` promise unwrapped in `src/app/dashboard/customers/[id]/page.tsx`
+- [x] Fetched `amount` for work orders in `customer.getById` tRPC query.
+- [x] Resolved implicit `any` type linter errors in `src/server/api/routers/customer.ts`.
+
+### Pending Tasks
+- [ ] **Manual Intervention Required:** Change `import React from "react";` to `import * as React from "react";` in `src/app/dashboard/customers/[id]/CustomerDetailClient.tsx` to fix the 'no default export' linter error.
+- [ ] **Manual Intervention Required:** Change `import React, { use } from 'react';` to `import * as React from 'react';` in `src/app/dashboard/customers/[id]/page.tsx` to fix the 'no default export' linter error.
+
+### Remaining Warnings (Optional to Address):
+- [ ] **Supabase Security Warning**: The user object from `supabase.auth.getSession()` or `supabase.auth.onAuthStateChange()` may be insecure. Recommend using `supabase.auth.getUser()` for authenticated data.
+
+### Notes
+- "Invalid hook call" and `useContext` errors are resolved.
+- `params.id` error resolved.

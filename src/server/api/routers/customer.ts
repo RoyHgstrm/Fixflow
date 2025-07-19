@@ -95,7 +95,7 @@ export const customerRouter = createTRPCRouter({
         });
 
         // Prepare type-specific counts
-        const typeStats = customerTypes.reduce((acc, type) => {
+        const typeStats = customerTypes.reduce((acc: Record<string, number>, type: { type: string; _count: number }) => {
           acc[type.type.toLowerCase()] = type._count;
           return acc;
         }, {} as Record<string, number>);
@@ -248,7 +248,7 @@ export const customerRouter = createTRPCRouter({
         const nextCursor = hasNextPage ? customers[customers.length - 1]?.id : undefined;
 
         return {
-          items: customers.slice(0, limit).map(customer => ({
+          items: customers.slice(0, limit).map((customer: any) => ({
             id: customer.id,
             name: customer.name,
             email: customer.email,
@@ -308,6 +308,7 @@ export const customerRouter = createTRPCRouter({
               status: true,
               scheduledDate: true,
               type: true,
+              amount: true, // Added missing amount field
             },
             orderBy: { scheduledDate: 'desc' },
             take: 5, // Limit to last 5 work orders
@@ -333,5 +334,48 @@ export const customerRouter = createTRPCRouter({
       }
 
       return customer;
+    }),
+
+  update: protectedProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        name: z.string().min(2, 'Name must be at least 2 characters').optional(),
+        email: z.string().email('Invalid email address').optional(),
+        phone: z.string().optional(),
+        address: z.string().optional(),
+        city: z.string().optional(),
+        state: z.string().optional(),
+        zipCode: z.string().optional(),
+        type: z.enum(['RESIDENTIAL', 'COMMERCIAL', 'INDUSTRIAL']).optional(),
+        notes: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const userRole = ctx.session?.user?.role ?? 'EMPLOYEE';
+      if (!['OWNER', 'MANAGER', 'ADMIN'].includes(userRole)) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'You do not have permission to update customers',
+        });
+      }
+
+      try {
+        const updatedCustomer = await ctx.db.customer.update({
+          where: {
+            id: input.id,
+            companyId: ctx.session.user.companyId!, // Ensure customer belongs to company
+          },
+          data: input,
+        });
+
+        return updatedCustomer;
+      } catch (error) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to update customer',
+          cause: error,
+        });
+      }
     }),
 }); 

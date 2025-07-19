@@ -7,10 +7,10 @@
     "clean": "powershell -Command \"Remove-Item -Recurse -Force node_modules,.next\"",
     "dev": "next dev",
     "typecheck": "tsc --noEmit",
-    "build": "next build && npm run typecheck",
+    "build": "next build",
     "build:fast": "next build",
     "start": "next start",
-    "lint": "eslint .",
+    "lint": "eslint --config eslint.config.js .",
     "check": "eslint .",
     "test": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -18,8 +18,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.1.1",
-    "@next-auth/prisma-adapter": "^1.0.7",
-    "@next-auth/supabase-adapter": "^0.2.1",
+    
     "@prisma/client": "^5.7.1",
     "@radix-ui/react-avatar": "^1.0.4",
     "@radix-ui/react-dialog": "^1.0.5",

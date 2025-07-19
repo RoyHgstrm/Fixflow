@@ -1,30 +1,28 @@
+'use client';
+
+import { useSession } from "@/lib/providers/session-provider";
 import { CustomerDetailClient } from "./CustomerDetailClient";
-import { auth } from "@/server/auth";
-import { redirect } from "next/navigation";
-import { Metadata, ResolvingMetadata } from "next";
+import { redirect } from 'next/navigation';
+import { motion } from 'framer-motion';
 
-export async function generateMetadata(
-  { params }: { params: Promise<{ id: string }> },
-  parent: ResolvingMetadata
-): Promise<Metadata> {
-  const resolvedParams = await params;
-  return {
-    title: `Customer #${resolvedParams.id} | FixFlow`,
-    description: `Details for customer #${resolvedParams.id}`,
-  };
-}
-
-export default async function CustomerDetailPage({ 
-  params 
-}: { 
-  params: Promise<{ id: string }> 
+export default function CustomerDetailPage({
+  params
+}: {
+  params: { id: string }
 }) {
-  const session = await auth();
-  const resolvedParams = await params;
+  const { session } = useSession();
 
   if (!session?.user) {
     redirect("/login");
   }
 
-  return <CustomerDetailClient customerId={resolvedParams.id} session={session} />;
-} 
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, ease: [0.6, -0.05, 0.01, 0.99] }}
+    >
+      <CustomerDetailClient customerId={params.id} session={session} />
+    </motion.div>
+  );
+}

@@ -12,6 +12,7 @@ build/
 
 # Testing
 coverage/
+playwright-report/
 
 # Database
 prisma/db.sqlite*
@@ -32,20 +33,30 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# Misc
-.DS_Store
-*.pem
+# Documentation
+*.md
+*.mdx
+docs/
+userflow.md
+DEPLOYMENT.md
+design-guidelines.md
+rules.md
+Style_Guidelines.md
+todo.md
 
-# IDE
+# Build artifacts
+*.log
+*.tmp
+*.bak
+*.swp
+*.swo
+
+# IDE and OS specific files
 .idea/
 .vscode/
-*.swp
-
-# OS
+.DS_Store
 Thumbs.db
 Desktop.ini
-
-# Mac
 __MACOSX/
 
 # Others
@@ -53,6 +64,11 @@ __MACOSX/
 count.txt
 .tanstack
 temp_check_supabase_users.ts
+
+# Docker
+docker-compose.yml
+Dockerfile
+.dockerignore
 
 # Prevent secrets from being committed
 !*.env.example

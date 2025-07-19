@@ -52,19 +52,23 @@ const cardVariants = {
  * Returns time-appropriate greeting based on local time
  * Handles edge cases and midnight/noon properly
  */
-const getTimeOfDay = () => {
+/**
+ * Returns time-appropriate greeting based on local time
+ * Handles all 24 hours with precise time slot boundaries
+ */
+const getTimeOfDay = (): string => {
   const hour = new Date().getHours();
   
-  // Define time slots with precise boundaries
+  // Ordered time periods covering all 24 hours without overlaps
   const timeSlots = [
-    { start: 5, end: 11, period: 'Morning' },    // 5:00 AM - 11:59 AM
-    { start: 12, end: 16, period: 'Afternoon' }, // 12:00 PM - 4:59 PM
-    { start: 17, end: 20, period: 'Evening' },   // 5:00 PM - 8:59 PM
-    { start: 21, end: 23, period: 'Night' },     // 9:00 PM - 11:59 PM
-    { start: 0, end: 4, period: 'Night' }        // 12:00 AM - 4:59 AM
+    { condition: (h: number) => h >= 5 && h <= 11, period: 'Morning' },    // 5:00 AM - 11:59 AM
+    { condition: (h: number) => h >= 12 && h <= 16, period: 'Afternoon' }, // 12:00 PM - 4:59 PM
+    { condition: (h: number) => h >= 17 && h <= 20, period: 'Evening' },   // 5:00 PM - 8:59 PM
+    { condition: (h: number) => h >= 21 || h <= 4, period: 'Night' }       // 9:00 PM - 4:59 AM
   ];
 
-  return timeSlots.find(slot => hour >= slot.start && hour <= slot.end)?.period || 'Day';
+  // Find the first matching time slot (using explicit type annotation)
+  return timeSlots.find(slot => slot.condition(hour))?.period ?? 'Day';
 };
 
 function getTodaysIncome(recentWorkOrders?: PaginatedResponse<WorkOrderResponse>) {
