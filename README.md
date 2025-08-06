@@ -151,4 +151,4 @@ We welcome contributions! Please refer to `rules.md` for project guidelines and 
 
 ## 📄 License
 
-[Specify your license here, e.g., MIT, Apache 2.0, etc.]
+Apache-2.0 license
